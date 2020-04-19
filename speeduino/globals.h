@@ -2,65 +2,95 @@
 #define GLOBALS_H
 #include <Arduino.h>
 #include "table.h"
-
-//These are configuration options for changing around the outputs that are used
-#define INJ_CHANNELS 4
-#define IGN_CHANNELS 5
+#include <assert.h>
 
 #if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__) || defined(__AVR_ATmega2561__)
   #define BOARD_DIGITAL_GPIO_PINS 54
   #define BOARD_NR_GPIO_PINS 62
   #define LED_BUILTIN 13
   #define CORE_AVR
+  #define BOARD_H "board_avr2560.h"
+  #define INJ_CHANNELS 4
+  #define IGN_CHANNELS 5
 
   //#define TIMER5_MICROS
 
 #elif defined(CORE_TEENSY)
-  #define BOARD_DIGITAL_GPIO_PINS 34
-  #define BOARD_NR_GPIO_PINS 34
+  #if defined(__MK64FX512__) || defined(__MK66FX1M0__)
+    #define CORE_TEENSY35
+    #define BOARD_H "board_teensy35.h"
+    #define SD_LOGGING //SD logging enabled by default for Teensy 3.5 as it has the slot built in
+  #elif defined(__IMXRT1062__)
+    #define CORE_TEENSY40
+    #define BOARD_H "board_teensy40.h"
+  #endif
+  #define INJ_CHANNELS 8
+  #define IGN_CHANNELS 8
 
-#elif defined(STM32_MCU_SERIES) || defined(ARDUINO_ARCH_STM32) || defined(__STM32F1__) || defined(STM32F4) || defined(STM32)
+#elif defined(STM32_MCU_SERIES) || defined(ARDUINO_ARCH_STM32) || defined(STM32)
   #define CORE_STM32
+  //These should be updated to 8 later, but there's bits missing currently
+  #define INJ_CHANNELS 4
+  #define IGN_CHANNELS 5
+
+//Select one for EEPROM, default are emulated and is very slow
+//#define SRAM_AS_EEPROM /*Use RTC registers, requires a 3V battery connected to Vbat pin */
+//#define SPIFLASH_AS_EEPROM /*Use M25Qxx SPI flash */
+//#define FRAM_AS_EEPROM /*Use FRAM like FM25xxx, MB85RSxxx or any SPI compatible */
+
   #ifndef word
     #define word(h, l) ((h << 8) | l) //word() function not defined for this platform in the main library
   #endif
-  #if defined (STM32F1) || defined(__STM32F1__)
+  
+  #if defined(ARDUINO_BLUEPILL_F103C8) || defined(ARDUINO_BLUEPILL_F103CB) \
+   || defined(ARDUINO_BLACKPILL_F401CC) || defined(ARDUINO_BLACKPILL_F411CE)
+    //STM32 Pill boards
     #define BOARD_DIGITAL_GPIO_PINS 34
     #define BOARD_NR_GPIO_PINS 34
     #ifndef LED_BUILTIN
       #define LED_BUILTIN PB1 //Maple Mini
     #endif
-  #elif defined(ARDUINO_BLACK_F407VE) || defined(STM32F4)
-    #define BOARD_DIGITAL_GPIO_PINS 80
-    #define BOARD_NR_GPIO_PINS 80
-    #define LED_BUILTIN PA7
+  #elif defined(ARDUINO_BLACK_F407VE)
+    #define BOARD_DIGITAL_GPIO_PINS 74
+    #define BOARD_NR_GPIO_PINS 74
+  #endif
+
+  #if defined(STM32_CORE_VERSION)
+    //Need to identify the official core better
+    #define CORE_STM32_OFFICIAL
+    #define BOARD_H "board_stm32_official.h"
+  #else
+    #define CORE_STM32_GENERIC
+    #define BOARD_H "board_stm32_generic.h"
   #endif
 
   //Specific mode for Bluepill due to its small flash size. This disables a number of strings from being compiled into the flash
-  #if defined(MCU_STM32F103C8) | defined(MCU_STM32F103CB)
+  #if defined(MCU_STM32F103C8) || defined(MCU_STM32F103CB)
     #define SMALL_FLASH_MODE
   #endif
 
+  #if __GNUC__ < 7 //Already included on GCC 7
   extern "C" char* sbrk(int incr); //Used to freeRam
-  #if defined(ARDUINO_ARCH_STM32) // STM32GENERIC core
-    inline unsigned char  digitalPinToInterrupt(unsigned char Interrupt_pin) { return Interrupt_pin; } //This isn't included in the stm32duino libs (yet)
-    #define portOutputRegister(port) (volatile byte *)( &(port->ODR) )
-    #define portInputRegister(port) (volatile byte *)( &(port->IDR) )
-  #else //libmaple core aka STM32DUINO
-    //These are defined in STM32F1/variants/generic_stm32f103c/variant.h but return a non byte* value
-    #define portOutputRegister(port) (volatile byte *)( &(port->regs->ODR) )
-    #define portInputRegister(port) (volatile byte *)( &(port->regs->IDR) )
   #endif
+  #ifndef digitalPinToInterrupt
+  inline uint32_t  digitalPinToInterrupt(uint32_t Interrupt_pin) { return Interrupt_pin; } //This isn't included in the stm32duino libs (yet)
+  #endif
+#elif defined(__SAMD21G18A__)
+  #define BOARD_H "board_samd21.h"
+  #define CORE_SAMD21
 #else
   #error Incorrect board selected. Please select the correct board (Usually Mega 2560) and upload again
 #endif
 
-//Handy bitsetting macros
-#define BIT_SET(a,b) ((a) |= (1<<(b)))
-#define BIT_CLEAR(a,b) ((a) &= ~(1<<(b)))
-#define BIT_CHECK(var,pos) !!((var) & (1<<(pos)))
+//This can only be included after the above section
+#include BOARD_H //Note that this is not a real file, it is defined in globals.h. 
 
-#define interruptSafe(c)  noInterrupts(); c interrupts(); //Wraps any code between nointerrupt and interrupt calls
+//Handy bitsetting macros
+#define BIT_SET(a,b) ((a) |= (1U<<(b)))
+#define BIT_CLEAR(a,b) ((a) &= ~(1U<<(b)))
+#define BIT_CHECK(var,pos) !!((var) & (1U<<(pos)))
+
+#define interruptSafe(c) (noInterrupts(); {c} interrupts();) //Wraps any code between nointerrupt and interrupt calls
 
 #define MS_IN_MINUTE 60000
 #define US_IN_MINUTE 60000000
@@ -85,7 +115,7 @@
 #define BIT_STATUS1_INJ2           1  //inj2
 #define BIT_STATUS1_INJ3           2  //inj3
 #define BIT_STATUS1_INJ4           3  //inj4
-#define BIT_STATUS1_DFCO           4 //Decelleration fuel cutoff
+#define BIT_STATUS1_DFCO           4  //Decelleration fuel cutoff
 #define BIT_STATUS1_BOOSTCUT       5  //Fuel component of MAP based boost cut out
 #define BIT_STATUS1_TOOTHLOG1READY 6  //Used to flag if tooth log 1 is ready
 #define BIT_STATUS1_TOOTHLOG2READY 7  //Used to flag if tooth log 2 is ready (Log is not currently used)
@@ -100,8 +130,8 @@
 #define BIT_SPARK_IDLE            6  // idle on
 #define BIT_SPARK_SYNC            7  // Whether engine has sync or not
 
-#define BIT_SPARK2_FLATSH         0 //Flat shift hard cut
-#define BIT_SPARK2_FLATSS         1 //Flat shift soft cut
+#define BIT_SPARK2_FLATSH         0  //Flat shift hard cut
+#define BIT_SPARK2_FLATSS         1  //Flat shift soft cut
 #define BIT_SPARK2_UNUSED3        2
 #define BIT_SPARK2_UNUSED4        3
 #define BIT_SPARK2_UNUSED5        4
@@ -117,7 +147,7 @@
 
 #define BIT_STATUS3_RESET_PREVENT 0 //Indicates whether reset prevention is enabled
 #define BIT_STATUS3_NITROUS       1
-#define BIT_STATUS3_UNUSED2       2
+#define BIT_STATUS3_FUEL2_ACTIVE  2
 #define BIT_STATUS3_UNUSED3       3
 #define BIT_STATUS3_UNUSED4       4
 #define BIT_STATUS3_NSQUIRTS1     5
@@ -127,8 +157,13 @@
 #define VALID_MAP_MAX 1022 //The largest ADC value that is valid for the MAP sensor
 #define VALID_MAP_MIN 2 //The smallest ADC value that is valid for the MAP sensor
 
-#define TOOTH_LOG_SIZE      64
-#define TOOTH_LOG_BUFFER    256
+#ifndef UNIT_TEST 
+#define TOOTH_LOG_SIZE      127
+#define TOOTH_LOG_BUFFER    128 //256
+#else
+#define TOOTH_LOG_SIZE      1
+#define TOOTH_LOG_BUFFER    1 //256
+#endif
 
 #define COMPOSITE_LOG_PRI   0
 #define COMPOSITE_LOG_SEC   1
@@ -174,10 +209,25 @@
 #define NITROUS_OFF         0
 #define NITROUS_STAGE1      1
 #define NITROUS_STAGE2      2
+#define NITROUS_BOTH        3
+
+#define AE_MODE_TPS         0
+#define AE_MODE_MAP         1
 
 #define KNOCK_MODE_OFF      0
 #define KNOCK_MODE_DIGITAL  1
 #define KNOCK_MODE_ANALOG   2
+
+#define FUEL2_MODE_OFF      0
+#define FUEL2_MODE_MULTIPLY 1
+#define FUEL2_MODE_ADD      2
+#define FUEL2_MODE_CONDITIONAL_SWITCH   3
+#define FUEL2_MODE_INPUT_SWITCH 4
+
+#define FUEL2_CONDITION_RPM 0
+#define FUEL2_CONDITION_MAP 1
+#define FUEL2_CONDITION_TPS 2
+#define FUEL2_CONDITION_ETH 3
 
 #define RESET_CONTROL_DISABLED             0
 #define RESET_CONTROL_PREVENT_WHEN_RUNNING 1
@@ -187,11 +237,20 @@
 #define OPEN_LOOP_BOOST     0
 #define CLOSED_LOOP_BOOST   1
 
+
+#define VVT_MODE_ONOFF      0
+#define VVT_MODE_OPEN_LOOP  1
+#define VVT_MODE_CLOSED_LOOP 2
+#define VVT_LOAD_MAP      0
+#define VVT_LOAD_TPS      1
+
 #define FOUR_STROKE         0
 #define TWO_STROKE          1
 
 #define MAX_RPM 18000 //This is the maximum rpm that the ECU will attempt to run at. It is NOT related to the rev limiter, but is instead dictates how fast certain operations will be allowed to run. Lower number gives better performance
-#define engineSquirtsPerCycle 2 //Would be 1 for a 2 stroke
+
+#define BATTV_COR_MODE_WHOLE 0
+#define BATTV_COR_MODE_OPENTIME 1
 
 //Table sizes
 #define CALIBRATION_TABLE_SIZE 512
@@ -204,123 +263,158 @@
 #define FUEL_PUMP_ON() *pump_pin_port |= (pump_pin_mask)
 #define FUEL_PUMP_OFF() *pump_pin_port &= ~(pump_pin_mask)
 
-const char TSfirmwareVersion[] PROGMEM = "Speeduino";
+extern const char TSfirmwareVersion[] PROGMEM;
 
-const byte data_structure_version = 2; //This identifies the data structure when reading / writing.
-//const byte page_size = 64;
-const int16_t npage_size[11] PROGMEM = {0,288,128,288,128,288,128,240,192,192,192};
-//const byte page11_size = 128;
+extern const byte data_structure_version; //This identifies the data structure when reading / writing.
+#define NUM_PAGES     12
+extern const uint16_t npage_size[NUM_PAGES]; /**< This array stores the size (in bytes) of each configuration page */
 #define MAP_PAGE_SIZE 288
 
-struct table3D fuelTable; //16x16 fuel map
-struct table3D ignitionTable; //16x16 ignition map
-struct table3D afrTable; //16x16 afr target map
-struct table3D stagingTable; //8x8 fuel staging table
-struct table3D boostTable; //8x8 boost map
-struct table3D vvtTable; //8x8 vvt map
-struct table3D trim1Table; //6x6 Fuel trim 1 map
-struct table3D trim2Table; //6x6 Fuel trim 2 map
-struct table3D trim3Table; //6x6 Fuel trim 3 map
-struct table3D trim4Table; //6x6 Fuel trim 4 map
-struct table2D taeTable; //4 bin TPS Acceleration Enrichment map (2D)
-struct table2D WUETable; //10 bin Warm Up Enrichment map (2D)
-struct table2D crankingEnrichTable; //4 bin cranking Enrichment map (2D)
-struct table2D dwellVCorrectionTable; //6 bin dwell voltage correction (2D)
-struct table2D injectorVCorrectionTable; //6 bin injector voltage correction (2D)
-struct table2D IATDensityCorrectionTable; //9 bin inlet air temperature density correction (2D)
-struct table2D IATRetardTable; //6 bin ignition adjustment based on inlet air temperature  (2D)
-struct table2D rotarySplitTable; //8 bin ignition split curve for rotary leading/trailing  (2D)
-struct table2D flexFuelTable;  //6 bin flex fuel correction table for fuel adjustments (2D)
-struct table2D flexAdvTable;   //6 bin flex fuel correction table for timing advance (2D)
-struct table2D flexBoostTable; //6 bin flex fuel correction table for boost adjustments (2D)
-struct table2D knockWindowStartTable;
-struct table2D knockWindowDurationTable;
+extern struct table3D fuelTable; //16x16 fuel map
+extern struct table3D fuelTable2; //16x16 fuel map
+extern struct table3D ignitionTable; //16x16 ignition map
+extern struct table3D afrTable; //16x16 afr target map
+extern struct table3D stagingTable; //8x8 fuel staging table
+extern struct table3D boostTable; //8x8 boost map
+extern struct table3D vvtTable; //8x8 vvt map
+extern struct table3D trim1Table; //6x6 Fuel trim 1 map
+extern struct table3D trim2Table; //6x6 Fuel trim 2 map
+extern struct table3D trim3Table; //6x6 Fuel trim 3 map
+extern struct table3D trim4Table; //6x6 Fuel trim 4 map
+extern struct table2D taeTable; //4 bin TPS Acceleration Enrichment map (2D)
+extern struct table2D maeTable;
+extern struct table2D WUETable; //10 bin Warm Up Enrichment map (2D)
+extern struct table2D ASETable; //4 bin After Start Enrichment map (2D)
+extern struct table2D ASECountTable; //4 bin After Start duration map (2D)
+extern struct table2D PrimingPulseTable; //4 bin Priming pulsewidth map (2D)
+extern struct table2D crankingEnrichTable; //4 bin cranking Enrichment map (2D)
+extern struct table2D dwellVCorrectionTable; //6 bin dwell voltage correction (2D)
+extern struct table2D injectorVCorrectionTable; //6 bin injector voltage correction (2D)
+extern struct table2D injectorAngleTable; //4 bin injector timing curve (2D)
+extern struct table2D IATDensityCorrectionTable; //9 bin inlet air temperature density correction (2D)
+extern struct table2D baroFuelTable; //8 bin baro correction curve (2D)
+extern struct table2D IATRetardTable; //6 bin ignition adjustment based on inlet air temperature  (2D)
+extern struct table2D idleTargetTable; //10 bin idle target table for idle timing (2D)
+extern struct table2D idleAdvanceTable; //6 bin idle advance adjustment table based on RPM difference  (2D)
+extern struct table2D CLTAdvanceTable; //6 bin ignition adjustment based on coolant temperature  (2D)
+extern struct table2D rotarySplitTable; //8 bin ignition split curve for rotary leading/trailing  (2D)
+extern struct table2D flexFuelTable;  //6 bin flex fuel correction table for fuel adjustments (2D)
+extern struct table2D flexAdvTable;   //6 bin flex fuel correction table for timing advance (2D)
+extern struct table2D flexBoostTable; //6 bin flex fuel correction table for boost adjustments (2D)
+extern struct table2D knockWindowStartTable;
+extern struct table2D knockWindowDurationTable;
 
 //These are for the direct port manipulation of the injectors, coils and aux outputs
-volatile byte *inj1_pin_port;
-volatile byte inj1_pin_mask;
-volatile byte *inj2_pin_port;
-volatile byte inj2_pin_mask;
-volatile byte *inj3_pin_port;
-volatile byte inj3_pin_mask;
-volatile byte *inj4_pin_port;
-volatile byte inj4_pin_mask;
-volatile byte *inj5_pin_port;
-volatile byte inj5_pin_mask;
-volatile byte *inj6_pin_port;
-volatile byte inj6_pin_mask;
-volatile byte *inj7_pin_port;
-volatile byte inj7_pin_mask;
-volatile byte *inj8_pin_port;
-volatile byte inj8_pin_mask;
+extern volatile PORT_TYPE *inj1_pin_port;
+extern volatile PINMASK_TYPE inj1_pin_mask;
+extern volatile PORT_TYPE *inj2_pin_port;
+extern volatile PINMASK_TYPE inj2_pin_mask;
+extern volatile PORT_TYPE *inj3_pin_port;
+extern volatile PINMASK_TYPE inj3_pin_mask;
+extern volatile PORT_TYPE *inj4_pin_port;
+extern volatile PINMASK_TYPE inj4_pin_mask;
+extern volatile PORT_TYPE *inj5_pin_port;
+extern volatile PINMASK_TYPE inj5_pin_mask;
+extern volatile PORT_TYPE *inj6_pin_port;
+extern volatile PINMASK_TYPE inj6_pin_mask;
+extern volatile PORT_TYPE *inj7_pin_port;
+extern volatile PINMASK_TYPE inj7_pin_mask;
+extern volatile PORT_TYPE *inj8_pin_port;
+extern volatile PINMASK_TYPE inj8_pin_mask;
 
-volatile byte *ign1_pin_port;
-volatile byte ign1_pin_mask;
-volatile byte *ign2_pin_port;
-volatile byte ign2_pin_mask;
-volatile byte *ign3_pin_port;
-volatile byte ign3_pin_mask;
-volatile byte *ign4_pin_port;
-volatile byte ign4_pin_mask;
-volatile byte *ign5_pin_port;
-volatile byte ign5_pin_mask;
-volatile byte *ign6_pin_port;
-volatile byte ign6_pin_mask;
-volatile byte *ign7_pin_port;
-volatile byte ign7_pin_mask;
-volatile byte *ign8_pin_port;
-volatile byte ign8_pin_mask;
+extern volatile PORT_TYPE *ign1_pin_port;
+extern volatile PINMASK_TYPE ign1_pin_mask;
+extern volatile PORT_TYPE *ign2_pin_port;
+extern volatile PINMASK_TYPE ign2_pin_mask;
+extern volatile PORT_TYPE *ign3_pin_port;
+extern volatile PINMASK_TYPE ign3_pin_mask;
+extern volatile PORT_TYPE *ign4_pin_port;
+extern volatile PINMASK_TYPE ign4_pin_mask;
+extern volatile PORT_TYPE *ign5_pin_port;
+extern volatile PINMASK_TYPE ign5_pin_mask;
+extern volatile PORT_TYPE *ign6_pin_port;
+extern volatile PINMASK_TYPE ign6_pin_mask;
+extern volatile PORT_TYPE *ign7_pin_port;
+extern volatile PINMASK_TYPE ign7_pin_mask;
+extern volatile PORT_TYPE *ign8_pin_port;
+extern volatile PINMASK_TYPE ign8_pin_mask;
 
-volatile byte *tach_pin_port;
-volatile byte tach_pin_mask;
-volatile byte *pump_pin_port;
-volatile byte pump_pin_mask;
+extern volatile PORT_TYPE *tach_pin_port;
+extern volatile PINMASK_TYPE tach_pin_mask;
+extern volatile PORT_TYPE *pump_pin_port;
+extern volatile PINMASK_TYPE pump_pin_mask;
 
-volatile byte *triggerPri_pin_port;
-volatile byte triggerPri_pin_mask;
-volatile byte *triggerSec_pin_port;
-volatile byte triggerSec_pin_mask;
+extern volatile PORT_TYPE *triggerPri_pin_port;
+extern volatile PINMASK_TYPE triggerPri_pin_mask;
+extern volatile PORT_TYPE *triggerSec_pin_port;
+extern volatile PINMASK_TYPE triggerSec_pin_mask;
 
 //These need to be here as they are used in both speeduino.ino and scheduler.ino
-bool channel1InjEnabled = true;
-bool channel2InjEnabled = false;
-bool channel3InjEnabled = false;
-bool channel4InjEnabled = false;
-bool channel5InjEnabled = false;
-bool channel6InjEnabled = false;
-bool channel7InjEnabled = false;
-bool channel8InjEnabled = false;
+extern bool channel1InjEnabled;
+extern bool channel2InjEnabled;
+extern bool channel3InjEnabled;
+extern bool channel4InjEnabled;
+extern bool channel5InjEnabled;
+extern bool channel6InjEnabled;
+extern bool channel7InjEnabled;
+extern bool channel8InjEnabled;
 
-int ignition1EndAngle = 0;
-int ignition2EndAngle = 0;
-int ignition3EndAngle = 0;
-int ignition4EndAngle = 0;
-int ignition5EndAngle = 0;
+extern int ignition1EndAngle;
+extern int ignition2EndAngle;
+extern int ignition3EndAngle;
+extern int ignition4EndAngle;
+extern int ignition5EndAngle;
+extern int ignition6EndAngle;
+extern int ignition7EndAngle;
+extern int ignition8EndAngle;
+
+extern int ignition1StartAngle;
+extern int ignition2StartAngle;
+extern int ignition3StartAngle;
+extern int ignition4StartAngle;
+extern int ignition5StartAngle;
+extern int ignition6StartAngle;
+extern int ignition7StartAngle;
+extern int ignition8StartAngle;
 
 //These are variables used across multiple files
-bool initialisationComplete = false; //Tracks whether the setup() functino has run completely
-volatile uint16_t mainLoopCount;
-unsigned long revolutionTime; //The time in uS that one revolution would take at current speed (The time tooth 1 was last seen, minus the time it was seen prior to that)
-volatile unsigned long timer5_overflow_count = 0; //Increments every time counter 5 overflows. Used for the fast version of micros()
-volatile unsigned long ms_counter = 0; //A counter that increments once per ms
-uint16_t fixedCrankingOverride = 0;
-bool clutchTrigger;
-bool previousClutchTrigger;
-volatile uint16_t toothHistory[TOOTH_LOG_BUFFER];
-volatile uint8_t compositeLogHistory[TOOTH_LOG_BUFFER];
-volatile bool fpPrimed = false; //Tracks whether or not the fuel pump priming has been completed yet
-volatile unsigned int toothHistoryIndex = 0;
-volatile byte toothHistorySerialIndex = 0;
-int CRANK_ANGLE_MAX = 720;
-int CRANK_ANGLE_MAX_IGN = 360;
-int CRANK_ANGLE_MAX_INJ = 360; // The number of crank degrees that the system track over. 360 for wasted / timed batch and 720 for sequential
+extern bool initialisationComplete; //Tracks whether the setup() function has run completely
+extern byte fpPrimeTime; //The time (in seconds, based on currentStatus.secl) that the fuel pump started priming
+extern volatile uint16_t mainLoopCount;
+extern unsigned long revolutionTime; //The time in uS that one revolution would take at current speed (The time tooth 1 was last seen, minus the time it was seen prior to that)
+extern volatile unsigned long timer5_overflow_count; //Increments every time counter 5 overflows. Used for the fast version of micros()
+extern volatile unsigned long ms_counter; //A counter that increments once per ms
+extern uint16_t fixedCrankingOverride;
+extern bool clutchTrigger;
+extern bool previousClutchTrigger;
+extern volatile uint32_t toothHistory[TOOTH_LOG_BUFFER];
+extern volatile uint8_t compositeLogHistory[TOOTH_LOG_BUFFER];
+extern volatile bool fpPrimed; //Tracks whether or not the fuel pump priming has been completed yet
+extern volatile unsigned int toothHistoryIndex;
+extern volatile byte toothHistorySerialIndex;
+extern unsigned long currentLoopTime; /**< The time (in uS) that the current mainloop started */
+extern unsigned long previousLoopTime; /**< The time (in uS) that the previous mainloop started */
+extern volatile uint16_t ignitionCount; /**< The count of ignition events that have taken place since the engine started */
+extern byte primaryTriggerEdge;
+extern byte secondaryTriggerEdge;
+extern int CRANK_ANGLE_MAX;
+extern int CRANK_ANGLE_MAX_IGN;
+extern int CRANK_ANGLE_MAX_INJ; //The number of crank degrees that the system track over. 360 for wasted / timed batch and 720 for sequential
+extern volatile uint16_t runSecsX10;
   
 
 //This needs to be here because using the config page directly can prevent burning the setting
-byte resetControl = RESET_CONTROL_DISABLED;
+extern byte resetControl;
 
-volatile byte TIMER_mask;
-volatile byte LOOP_TIMER;
+extern volatile byte TIMER_mask;
+extern volatile byte LOOP_TIMER;
+
+//These functions all do checks on a pin to determine if it is already in use by another (higher importance) function
+#define pinIsInjector(pin)  ( ((pin) == pinInjector1) || ((pin) == pinInjector2) || ((pin) == pinInjector3) || ((pin) == pinInjector4) || ((pin) == pinInjector5) || ((pin) == pinInjector6) || ((pin) == pinInjector7) || ((pin) == pinInjector8) )
+#define pinIsIgnition(pin)  ( ((pin) == pinCoil1) || ((pin) == pinCoil2) || ((pin) == pinCoil3) || ((pin) == pinCoil4) || ((pin) == pinCoil5) || ((pin) == pinCoil6) || ((pin) == pinCoil7) || ((pin) == pinCoil8) )
+#define pinIsSensor(pin)    ( ((pin) == pinCLT) || ((pin) == pinIAT) || ((pin) == pinMAP) || ((pin) == pinTPS) || ((pin) == pinO2) || ((pin) == pinBat) )
+#define pinIsUsed(pin)      ( pinIsInjector((pin)) || pinIsIgnition((pin)) || pinIsSensor((pin)) )
+#define pinIsOutput(pin)    ( ((pin) == pinFuelPump) || ((pin) == pinFan) || ((pin) == pinVVT_1) || ((pin) == pinVVT_2) || ((pin) == pinBoost) || ((pin) == pinIdle1) || ((pin) == pinIdle2) || ((pin) == pinTachOut) )
 
 //The status struct contains the current values for all 'live' variables
 //In current version this is 64 bytes
@@ -334,14 +428,14 @@ struct statuses {
   int16_t EMAP;
   int16_t EMAPADC;
   byte baro; //Barometric pressure is simply the inital MAP reading, taken before the engine is running. Alternatively, can be taken from an external sensor
-  byte TPS; //The current TPS reading (0% - 100%)
-  byte TPSlast; //The previous TPS reading
-  unsigned long TPS_time; //The time the TPS sample was taken
-  unsigned long TPSlast_time; //The time the previous TPS sample was taken
-  byte tpsADC; //0-255 byte representation of the TPS
-  byte tpsDOT;
+  byte TPS; /**< The current TPS reading (0% - 100%). Is the tpsADC value after the calibration is applied */
+  byte tpsADC; /**< 0-255 byte representation of the TPS. Downsampled from the original 10-bit reading, but before any calibration is applied */
+  byte tpsDOT; /**< TPS delta over time. Measures the % per second that the TPS is changing. Value is divided by 10 to be stored in a byte */
+  byte mapDOT; /**< MAP delta over time. Measures the kpa per second that the MAP is changing. Value is divided by 10 to be stored in a byte */
   volatile int rpmDOT;
-  byte VE;
+  byte VE; /**< The current VE value being used in the fuel calculation. Can be the same as VE1 or VE2, or a calculated value of both */
+  byte VE1; /**< The VE value from fuel table 1 */
+  byte VE2; /**< The VE value from fuel table 2, if in use (and required conditions are met) */
   byte O2;
   byte O2_2;
   int coolant;
@@ -352,28 +446,31 @@ struct statuses {
   int O2ADC;
   int O2_2ADC;
   int dwell;
-  byte dwellCorrection; //The amount of correction being applied to the dwell time.
-  byte battery10; //The current BRV in volts (multiplied by 10. Eg 12.5V = 125)
-  int8_t advance; //Signed 8 bit as advance can now go negative (ATDC)
-  byte corrections;
-  int16_t TAEamount; //The amount of accleration enrichment currently being applied
-  byte egoCorrection; //The amount of closed loop AFR enrichment currently being applied
-  byte wueCorrection; //The amount of warmup enrichment currently being applied
-  byte batCorrection; //The amount of battery voltage enrichment currently being applied
-  byte iatCorrection; //The amount of inlet air temperature adjustment currently being applied
-  byte launchCorrection; //The amount of correction being applied if launch control is active
-  byte flexCorrection; //Amount of correction being applied to compensate for ethanol content
-  int8_t flexIgnCorrection; //Amount of additional advance being applied based on flex. Note the type as this allows for negative values
+  byte dwellCorrection; /**< The amount of correction being applied to the dwell time. */
+  byte battery10; /**< The current BRV in volts (multiplied by 10. Eg 12.5V = 125) */
+  int8_t advance; /**< Signed 8 bit as advance can now go negative (ATDC) */
+  uint16_t corrections; /**< The total current corrections % amount */
+  uint16_t AEamount; /**< The amount of accleration enrichment currently being applied. 100=No change. Varies above 255 */
+  byte egoCorrection; /**< The amount of closed loop AFR enrichment currently being applied */
+  byte wueCorrection; /**< The amount of warmup enrichment currently being applied */
+  byte batCorrection; /**< The amount of battery voltage enrichment currently being applied */
+  byte iatCorrection; /**< The amount of inlet air temperature adjustment currently being applied */
+  byte baroCorrection; /**< The amount of correction being applied for the current baro reading */
+  byte launchCorrection; /**< The amount of correction being applied if launch control is active */
+  byte flexCorrection; /**< Amount of correction being applied to compensate for ethanol content */
+  int8_t flexIgnCorrection; /**< Amount of additional advance being applied based on flex. Note the type as this allows for negative values */
   byte afrTarget;
-  byte idleDuty;
-  bool idleUpActive;
-  bool fanOn; //Whether or not the fan is turned on
-  volatile byte ethanolPct; //Ethanol reading (if enabled). 0 = No ethanol, 100 = pure ethanol. Eg E85 = 85.
-  unsigned long TAEEndTime; //The target end time used whenever TAE is turned on
+  byte idleDuty; /**< The current idle duty cycle amount if PWM idle is selected and active */
+  byte CLIdleTarget; /**< The target idle RPM (when closed loop idle control is active) */
+  bool idleUpActive; /**< Whether the externally controlled idle up is currently active */
+  bool CTPSActive; /**< Whether the externally controlled closed throttle position sensor is currently active */
+  bool fanOn; /**< Whether or not the fan is turned on */
+  volatile byte ethanolPct; /**< Ethanol reading (if enabled). 0 = No ethanol, 100 = pure ethanol. Eg E85 = 85. */
+  unsigned long AEEndTime; /**< The target end time used whenever AE is turned on */
   volatile byte status1;
   volatile byte spark;
   volatile byte spark2;
-  byte engine;
+  uint8_t engine;
   unsigned int PW1; //In uS
   unsigned int PW2; //In uS
   unsigned int PW3; //In uS
@@ -382,63 +479,69 @@ struct statuses {
   unsigned int PW6; //In uS
   unsigned int PW7; //In uS
   unsigned int PW8; //In uS
-  volatile byte runSecs; //Counter of seconds since cranking commenced (overflows at 255 obviously)
-  volatile byte secl; //Continous
-  volatile unsigned int loopsPerSecond;
-  boolean launchingSoft; //True when in launch control soft limit mode
-  boolean launchingHard; //True when in launch control hard limit mode
+  volatile byte runSecs; /**< Counter of seconds since cranking commenced (overflows at 255 obviously) */
+  volatile byte secl; /**< Counter incrementing once per second. Will overflow after 255 and begin again. This is used by TunerStudio to maintain comms sync */
+  volatile uint32_t loopsPerSecond; /**< A performance indicator showing the number of main loops that are being executed each second */ 
+  bool launchingSoft; /**< Indicator showing whether soft launch control adjustments are active */
+  bool launchingHard; /**< Indicator showing whether hard launch control adjustments are active */
   uint16_t freeRAM;
-  unsigned int clutchEngagedRPM;
+  unsigned int clutchEngagedRPM; /**< The RPM at which the clutch was last depressed. Used for distinguishing between launch control and flat shift */ 
   bool flatShiftingHard;
-  volatile uint32_t startRevolutions; //A counter for how many revolutions have been completed since sync was achieved.
+  volatile uint32_t startRevolutions; /**< A counter for how many revolutions have been completed since sync was achieved. */
   uint16_t boostTarget;
   byte testOutputs;
   bool testActive;
   uint16_t boostDuty; //Percentage value * 100 to give 2 points of precision
-  byte idleLoad; //Either the current steps or current duty cycle for the idle control.
+  byte idleLoad; /**< Either the current steps or current duty cycle for the idle control. */
   uint16_t canin[16];   //16bit raw value of selected canin data for channel 0-15
-  uint8_t current_caninchannel = 0; //start off at channel 0
-  uint16_t crankRPM = 400; //The actual cranking RPM limit. Saves us multiplying it everytime from the config page
+  uint8_t current_caninchannel = 0; /**< Current CAN channel, defaults to 0 */
+  uint16_t crankRPM = 400; /**< The actual cranking RPM limit. This is derived from the value in the config page, but saves us multiplying it everytime it's used (Config page value is stored divided by 10) */
   volatile byte status3;
-  int16_t flexBoostCorrection; //Amount of boost added based on flex
+  int16_t flexBoostCorrection; /**< Amount of boost added based on flex */
   byte nitrous_status;
   byte nSquirts;
-  byte nChannels; //Number of fuel and ignition channels
+  byte nChannels; /**< Number of fuel and ignition channels.  */
   int16_t fuelLoad;
+  int16_t fuelLoad2;
   int16_t ignLoad;
-  bool fuelPumpOn; //The current status of the fuel pump
+  bool fuelPumpOn; /**< Indicator showing the current status of the fuel pump */
   byte syncLossCounter;
   byte knockRetard;
   bool knockActive;
   bool toothLogEnabled;
   bool compositeLogEnabled;
-
-  //Helpful bitwise operations:
-  //Useful reference: http://playground.arduino.cc/Code/BitMath
-  // y = (x >> n) & 1;    // n=0..15.  stores nth bit of x in y.  y becomes 0 or 1.
-  // x &= ~(1 << n);      // forces nth bit of x to be 0.  all other bits left alone.
-  // x |= (1 << n);       // forces nth bit of x to be 1.  all other bits left alone.
-
+  //int8_t vvtAngle;
+  long vvtAngle;
+  byte vvtTargetAngle;
+  byte vvtDuty;
+  uint16_t injAngle;
+  byte ASEValue;
+  uint16_t vss; /**< Current speed reading. Natively stored in kph and converted to mph in TS if required */
 };
-struct statuses currentStatus; //The global status object
 
-//Page 1 of the config - See the ini file for further reference
-//This mostly covers off variables that are required for fuel
+/**
+ * @brief This mostly covers off variables that are required for fuel
+ * 
+ * See the ini file for further reference
+ * 
+ */
 struct config2 {
 
-  byte unused2_1;
-  byte unused2_2;
-  byte asePct;  //Afterstart enrichment (%)
-  byte aseCount; //Afterstart enrichment cycles. This is the number of ignition cycles that the afterstart enrichment % lasts for
+  byte aseTsnDelay;
+  byte aeColdPct;  //AE cold clt modifier %
+  byte aeColdTaperMin; //AE cold modifier, taper start temp (full modifier), was ASE in early versions
+  byte aeMode : 2; /**< Acceleration Enrichment mode. 0 = TPS, 1 = MAP. Values 2 and 3 reserved for potential future use (ie blended TPS / MAP) */
+  byte battVCorMode : 1;
+  byte unused1_3c : 5;
   byte wueValues[10]; //Warm up enrichment array (10 bytes)
   byte crankingPct; //Cranking enrichment
   byte pinMapping; // The board / ping mapping to be used
   byte tachoPin : 6; //Custom pin setting for tacho output
   byte tachoDiv : 2; //Whether to change the tacho speed
-  byte unused2_17;
-  byte unused2_18;
-  byte tpsThresh;
-  byte taeTime;
+  byte tachoDuration; //The duration of the tacho pulse in mS
+  byte maeThresh; /**< The MAPdot threshold that must be exceeded before AE is engaged */
+  byte taeThresh; /**< The TPSdot threshold that must be exceeded before AE is engaged */
+  byte aeTime;
 
   //Display config bits
   byte displayType : 3; //21
@@ -461,10 +564,7 @@ struct config2 {
   byte ignAlgorithm : 3;
   byte indInjAng : 1;
   byte injOpen; //Injector opening time (ms * 10)
-  uint16_t inj1Ang;
-  uint16_t inj2Ang;
-  uint16_t inj3Ang;
-  uint16_t inj4Ang;
+  uint16_t injAng[4];
 
   //config1 in ini
   byte mapSample : 2;
@@ -481,13 +581,13 @@ struct config2 {
   //config3 in ini
   byte engineType : 1;
   byte flexEnabled : 1;
-  byte unused2_38c : 1; //"Speed Density", "Alpha-N"
+  byte legacyMAP  : 1;
   byte baroCorr : 1;
   byte injLayout : 2;
   byte perToothIgn : 1;
   byte dfcoEnabled : 1; //Whether or not DFCO is turned on
 
-  byte primePulse;
+  byte aeColdTaperMax;  //AE cold modifier, taper end temp (no modifier applied), was primePulse in early versions
   byte dutyLim;
   byte flexFreqLow; //Lowest valid frequency reading from the flex sensor
   byte flexFreqHigh; //Highest valid frequency reading from the flex sensor
@@ -508,8 +608,8 @@ struct config2 {
   byte idleUpEnabled : 1;
 
   byte idleUpAdder;
-  byte taeTaperMin;
-  byte taeTaperMax;
+  byte aeTaperMin;
+  byte aeTaperMax;
 
   byte iacCLminDuty;
   byte iacCLmaxDuty;
@@ -520,7 +620,46 @@ struct config2 {
 
   int8_t EMAPMin; //Must be signed
   uint16_t EMAPMax;
-  byte unused1_70[58];
+
+  byte fanWhenOff : 1;      // Only run fan when engine is running
+  byte fanUnused : 7;
+  byte asePct[4];  //Afterstart enrichment (%)
+  byte aseCount[4]; //Afterstart enrichment cycles. This is the number of ignition cycles that the afterstart enrichment % lasts for
+  byte aseBins[4]; //Afterstart enrichment temp axis
+  byte primePulse[4]; //Priming pulsewidth
+  byte primeBins[4]; //Priming temp axis
+
+  byte CTPSPin : 6;
+  byte CTPSPolarity : 1;
+  byte CTPSEnabled : 1;
+
+  byte idleAdvEnabled : 2;
+  byte idleAdvAlgorithm : 1;
+  byte IdleAdvDelay : 5;
+  
+  byte idleAdvRPM;
+  byte idleAdvTPS;
+
+  byte injAngRPM[4];
+
+  byte idleTaperTime;
+  byte dfcoDelay;
+  byte dfcoMinCLT;
+
+  //VSS Stuff
+  byte vssEnable : 1;
+  byte vssPullup : 1;
+  
+  uint16_t vssPulsesPerKm;
+  byte vssSpare;
+  uint16_t vssRatio1;
+  uint16_t vssRatio2;
+  byte vssRatio3;
+  byte vssRatio4;
+  byte vssRatio5;
+  byte vssRatio6;
+
+  byte unused2_95[14];
 
 #if defined(CORE_AVR)
   };
@@ -550,7 +689,7 @@ struct config4 {
   byte trigPatternSec; //Mode for Missing tooth secondary trigger.  Either single tooth cam wheel or 4-1
   uint8_t bootloaderCaps; //Capabilities of the bootloader over stock. e.g., 0=Stock, 1=Reset protection, etc.
 
-  byte resetControl : 2; //Which method of reset control to use (0=None, 1=Prevent When Running, 2=Prevent Always, 3=Serial Command)
+  byte resetControlConfig : 2; //Which method of reset control to use (0=None, 1=Prevent When Running, 2=Prevent Always, 3=Serial Command)
   byte resetControlPin : 6;
 
   byte StgCycles; //The number of initial cycles before the ignition should fire when first cranking
@@ -593,8 +732,22 @@ struct config4 {
   byte ADCFILTER_BAT;
   byte ADCFILTER_MAP; //This is only used on Instantaneous MAP readings and is intentionally very weak to allow for faster response
   byte ADCFILTER_BARO;
+  
+  byte cltAdvBins[6]; /**< Coolant Temp timing advance curve bins */
+  byte cltAdvValues[6]; /**< Coolant timing advance curve values. These are translated by 15 to allow for negative values */
 
-  byte unused2_64[57];
+  byte maeBins[4]; /**< MAP based AE MAPdot bins */
+  byte maeRates[4]; /**< MAP based AE values */
+
+  int8_t batVoltCorrect; /**< Battery voltage calibration offset */
+
+  byte baroFuelBins[8];
+  byte baroFuelValues[8];
+
+  byte idleAdvBins[6];
+  byte idleAdvValues[6];
+
+  byte unused4_120[8];
 
 #if defined(CORE_AVR)
   };
@@ -617,7 +770,12 @@ struct config6 {
   byte egoKD;
   byte egoTemp; //The temperature above which closed loop functions
   byte egoCount; //The number of ignition cylces per step
-  byte unused6_6;
+  byte vvtMode : 2; //Valid VVT modes are 'on/off', 'open loop' and 'closed loop'
+  byte vvtLoadSource : 2; //Load source for VVT (TPS or MAP)
+  byte vvtCLDir : 1; //VVT direction (advance or retard)
+  byte vvtCLUseHold : 1; //Whether or not to use a hold duty cycle (Most cases are Yes)
+  byte vvtCLAlterFuelTiming : 1;
+  byte unused6_6 : 1;
   byte egoLimit; //Maximum amount the closed loop will vary the fueling
   byte ego_min; //AFR must be above this for closed loop to function
   byte ego_max; //AFR must be below this for closed loop to function
@@ -626,7 +784,7 @@ struct config6 {
   byte egoTPSMax; //TPS must be below this for closed loop to function
   byte vvtPin : 6;
   byte useExtBaro : 1;
-  byte boostMode : 1; //Simple of full boost contrl
+  byte boostMode : 1; //Simple of full boost control
   byte boostPin : 6;
   byte VVTasOnOff : 1; //Whether or not to use the VVT table as an on/off map
   byte useEMAP : 1;
@@ -676,7 +834,7 @@ struct config6 {
   byte iacAlgorithm : 3; //Valid values are: "None", "On/Off", "PWM", "PWM Closed Loop", "Stepper", "Stepper Closed Loop"
   byte iacStepTime : 3; //How long to pulse the stepper for to ensure the step completes (ms)
   byte iacChannels : 1; //How many outputs to use in PWM mode (0 = 1 channel, 1 = 2 channels)
-  byte iacPWMdir : 1; //Directino of the PWM valve. 0 = Normal = Higher RPM with more duty. 1 = Reverse = Lower RPM with more duty
+  byte iacPWMdir : 1; //Direction of the PWM valve. 0 = Normal = Higher RPM with more duty. 1 = Reverse = Lower RPM with more duty
 
   byte iacFastTemp; //Fast idle temp when using a simple on/off valve
 
@@ -690,6 +848,7 @@ struct config6 {
   byte fanHyster;         // Fan hysteresis
   byte fanFreq;           // Fan PWM frequency
   byte fanPWMBins[4];     //Temperature Bins for the PWM fan control
+
 #if defined(CORE_AVR)
   };
 #else
@@ -699,8 +858,9 @@ struct config6 {
 //Page 9 of the config mostly deals with CANBUS control
 //See ini file for further info (Config Page 10 in the ini)
 struct config9 {
-  byte enable_canbus:2;
-  byte enable_candata_in:1;
+  byte enable_secondarySerial:1;            //enable secondary serial
+  byte intcan_available:1;                     //enable internal can module
+  byte enable_intcan:1;
   byte caninput_sel[16];                    //bit status on/Can/analog_local/digtal_local if input is enabled
   uint16_t caninput_source_can_address[16];        //u16 [15] array holding can address of input
   uint8_t caninput_source_start_byte[16];     //u08 [15] array holds the start byte number(value of 0-7)
@@ -723,10 +883,12 @@ struct config9 {
   uint16_t obd_address;             //speeduino OBD diagnostic address
   uint8_t Auxinpina[16];            //analog  pin number when internal aux in use
   uint8_t Auxinpinb[16];            // digital pin number when internal aux in use
-  
-  byte unused10_152;
-  byte unused10_153;
-  byte unused10_154;
+
+  byte iacStepperInv : 1;  //stepper direction of travel to allow reversing. 0=normal, 1=inverted.
+  byte iacCoolTime : 3; // how long to wait for the stepper to cool between steps
+
+  byte iacMaxSteps; // Step limit beyond which the stepper won't be driven. Should always be less than homing steps. Stored div 3 as per home steps.
+
   byte unused10_155;
   byte unused10_156;
   byte unused10_157;
@@ -777,81 +939,106 @@ Page 10 - No specific purpose. Created initially for the cranking enrich curve
 See ini file for further info (Config Page 11 in the ini)
 */
 struct config10 {
-  byte crankingEnrichBins[4];
-  byte crankingEnrichValues[4];
+  byte crankingEnrichBins[4]; //Bytes 0-4
+  byte crankingEnrichValues[4]; //Bytes 4-7
 
+  //Byte 8
   byte rotaryType : 2;
   byte stagingEnabled : 1;
   byte stagingMode : 1;
   byte EMAPPin : 4;
 
-  byte rotarySplitValues[8];
-  byte rotarySplitBins[8];
+  byte rotarySplitValues[8]; //Bytes 9-16
+  byte rotarySplitBins[8]; //Bytes 17-24
 
-  uint16_t boostSens;
-  byte boostIntv;
-  uint16_t stagedInjSizePri;
-  uint16_t stagedInjSizeSec;
-  byte lnchCtrlTPS;
+  uint16_t boostSens; //Bytes 25-26
+  byte boostIntv; //Byte 27
+  uint16_t stagedInjSizePri; //Bytes 28-29
+  uint16_t stagedInjSizeSec; //Bytes 30-31
+  byte lnchCtrlTPS; //Byte 32
 
-  uint8_t flexBoostBins[6];
-  int16_t flexBoostAdj[6];  //kPa to be added to the boost target @ current ethanol (negative values allowed)
-  uint8_t flexFuelBins[6];
-  uint8_t flexFuelAdj[6];   //Fuel % @ current ethanol (typically 100% @ 0%, 163% @ 100%)
-  uint8_t flexAdvBins[6];
-  uint8_t  flexAdvAdj[6];    //Additional advance (in degrees) @ current ethanol (typically 0 @ 0%, 10-20 @ 100%). NOTE: THIS IS A SIGNED VALUE!
+  uint8_t flexBoostBins[6]; //Byets 33-38
+  int16_t flexBoostAdj[6];  //kPa to be added to the boost target @ current ethanol (negative values allowed). Bytes 39-50
+  uint8_t flexFuelBins[6]; //Bytes 51-56
+  uint8_t flexFuelAdj[6];   //Fuel % @ current ethanol (typically 100% @ 0%, 163% @ 100%). Bytes 57-62
+  uint8_t flexAdvBins[6]; //Bytes 63-68
+  uint8_t flexAdvAdj[6];    //Additional advance (in degrees) @ current ethanol (typically 0 @ 0%, 10-20 @ 100%). NOTE: THIS SHOULD BE A SIGNED VALUE BUT 2d TABLE LOOKUP NOT WORKING WITH IT CURRENTLY!
                             //And another three corn rows die.
+                            //Bytes 69-74
 
+  //Byte 75
   byte n2o_enable : 2;
   byte n2o_arming_pin : 6;
-  byte n2o_minCLT;
-  byte n2o_maxMAP;
-  byte n2o_minTPS;
-  byte n2o_maxAFR;
+  byte n2o_minCLT; //Byte 76
+  byte n2o_maxMAP; //Byte 77
+  byte n2o_minTPS; //Byte 78
+  byte n2o_maxAFR; //Byte 79
 
+  //Byte 80
   byte n2o_stage1_pin : 6;
   byte n2o_pin_polarity : 1;
   byte n2o_stage1_unused : 1;
-  byte n2o_stage1_minRPM;
-  byte n2o_stage1_maxRPM;
-  byte n2o_stage1_adderMin;
-  byte n2o_stage1_adderMax;
-  byte n2o_stage1_retard;
+  byte n2o_stage1_minRPM; //Byte 81
+  byte n2o_stage1_maxRPM; //Byte 82
+  byte n2o_stage1_adderMin; //Byte 83
+  byte n2o_stage1_adderMax; //Byte 84
+  byte n2o_stage1_retard; //Byte 85
 
+  //Byte 86
   byte n2o_stage2_pin : 6;
   byte n2o_stage2_unused : 2;
-  byte n2o_stage2_minRPM;
-  byte n2o_stage2_maxRPM;
-  byte n2o_stage2_adderMin;
-  byte n2o_stage2_adderMax;
-  byte n2o_stage2_retard;
+  byte n2o_stage2_minRPM; //Byte 87
+  byte n2o_stage2_maxRPM; //Byte 88
+  byte n2o_stage2_adderMin; //Byte 89
+  byte n2o_stage2_adderMax; //Byte 90
+  byte n2o_stage2_retard; //Byte 91
 
+  //Byte 92
   byte knock_mode : 2;
   byte knock_pin : 6;
 
+  //Byte 93
   byte knock_trigger : 1;
   byte knock_pullup : 1;
   byte knock_limiterDisable : 1;
   byte knock_unused : 2;
   byte knock_count : 3;
 
-  byte knock_threshold;
-  byte knock_maxMAP;
-  byte knock_maxRPM;
-  byte knock_window_rpms[6];
-  byte knock_window_angle[6];
-  byte knock_window_dur[6];
+  byte knock_threshold; //Byte 94
+  byte knock_maxMAP; //Byte 95
+  byte knock_maxRPM; //Byte 96
+  byte knock_window_rpms[6]; //Bytes 97-102
+  byte knock_window_angle[6]; //Bytes 103-108
+  byte knock_window_dur[6]; //Bytes 109-114
 
-  byte knock_maxRetard;
-  byte knock_firstStep;
-  byte knock_stepSize;
-  byte knock_stepTime;
+  byte knock_maxRetard; //Byte 115
+  byte knock_firstStep; //Byte 116
+  byte knock_stepSize; //Byte 117
+  byte knock_stepTime; //Byte 118
         
-  byte knock_duration; //Time after knock retard starts that it should start recovering
-  byte knock_recoveryStepTime;
-  byte knock_recoveryStep;
+  byte knock_duration; //Time after knock retard starts that it should start recovering. Byte 119
+  byte knock_recoveryStepTime; //Byte 120
+  byte knock_recoveryStep; //Byte 121
 
-  byte unused11_122_191[69];
+  //Byte 122
+  byte fuel2Algorithm : 3;
+  byte fuel2Mode : 3;
+  byte fuel2SwitchVariable : 2;
+  uint16_t fuel2SwitchValue;
+
+  //Byte 123
+  byte fuel2InputPin : 6;
+  byte fuel2InputPolarity : 1;
+  byte fuel2InputPullup : 1;
+
+  byte vvtCLholdDuty;
+  byte vvtCLKP;
+  byte vvtCLKI;
+  byte vvtCLKD;
+  uint16_t vvtCLMinAng;
+  uint16_t vvtCLMaxAng;
+
+  byte unused11_123_191[58];
 
 #if defined(CORE_AVR)
   };
@@ -859,87 +1046,98 @@ struct config10 {
   } __attribute__((__packed__)); //The 32 bit systems require all structs to be fully packed
 #endif
 
-byte pinInjector1; //Output pin injector 1
-byte pinInjector2; //Output pin injector 2
-byte pinInjector3; //Output pin injector 3 is on
-byte pinInjector4; //Output pin injector 4 is on
-byte pinInjector5; //Output pin injector 5 NOT USED YET
-byte pinInjector6; //Placeholder only - NOT USED
-byte pinInjector7; //Placeholder only - NOT USED
-byte pinInjector8; //Placeholder only - NOT USED
-byte pinCoil1; //Pin for coil 1
-byte pinCoil2; //Pin for coil 2
-byte pinCoil3; //Pin for coil 3
-byte pinCoil4; //Pin for coil 4
-byte pinCoil5; //Pin for coil 5
-byte pinCoil6; //Pin for coil 6
-byte pinCoil7; //Pin for coil 7
-byte pinCoil8; //Pin for coil 8
-byte pinTrigger; //The CAS pin
-byte pinTrigger2; //The Cam Sensor pin
-byte pinTrigger3;	//the 2nd cam sensor pin
-byte pinTPS;//TPS input pin
-byte pinMAP; //MAP sensor pin
-byte pinEMAP; //EMAP sensor pin
-byte pinMAP2; //2nd MAP sensor (Currently unused)
-byte pinIAT; //IAT sensor pin
-byte pinCLT; //CLS sensor pin
-byte pinO2; //O2 Sensor pin
-byte pinO2_2; //second O2 pin
-byte pinBat; //Battery voltage pin
-byte pinDisplayReset; // OLED reset pin
-byte pinTachOut; //Tacho output
-byte pinFuelPump; //Fuel pump on/off
-byte pinIdle1; //Single wire idle control
-byte pinIdle2; //2 wire idle control (Not currently used)
-byte pinIdleUp; //Input for triggering Idle Up
-byte pinSpareTemp1; // Future use only
-byte pinSpareTemp2; // Future use only
-byte pinSpareOut1; //Generic output
-byte pinSpareOut2; //Generic output
-byte pinSpareOut3; //Generic output
-byte pinSpareOut4; //Generic output
-byte pinSpareOut5; //Generic output
-byte pinSpareOut6; //Generic output
-byte pinSpareHOut1; //spare high current output
-byte pinSpareHOut2; // spare high current output
-byte pinSpareLOut1; // spare low current output
-byte pinSpareLOut2; // spare low current output
-byte pinSpareLOut3;
-byte pinSpareLOut4;
-byte pinSpareLOut5;
-byte pinBoost;
-byte pinVVT_1;		// vvt output 1
-byte pinVVt_2;		// vvt output 2
-byte pinFan;       // Cooling fan output
-byte pinStepperDir; //Direction pin for the stepper motor driver
-byte pinStepperStep; //Step pin for the stepper motor driver
-byte pinStepperEnable; //Turning the DRV8825 driver on/off
-byte pinLaunch;
-byte pinIgnBypass; //The pin used for an ignition bypass (Optional)
-byte pinFlex; //Pin with the flex sensor attached
-byte pinBaro; //Pin that an external barometric pressure sensor is attached to (If used)
-byte pinResetControl; // Output pin used control resetting the Arduino
+extern byte pinInjector1; //Output pin injector 1
+extern byte pinInjector2; //Output pin injector 2
+extern byte pinInjector3; //Output pin injector 3
+extern byte pinInjector4; //Output pin injector 4
+extern byte pinInjector5; //Output pin injector 5
+extern byte pinInjector6; //Output pin injector 6
+extern byte pinInjector7; //Output pin injector 7
+extern byte pinInjector8; //Output pin injector 8
+extern byte pinCoil1; //Pin for coil 1
+extern byte pinCoil2; //Pin for coil 2
+extern byte pinCoil3; //Pin for coil 3
+extern byte pinCoil4; //Pin for coil 4
+extern byte pinCoil5; //Pin for coil 5
+extern byte pinCoil6; //Pin for coil 6
+extern byte pinCoil7; //Pin for coil 7
+extern byte pinCoil8; //Pin for coil 8
+extern byte pinTrigger; //The CAS pin
+extern byte pinTrigger2; //The Cam Sensor pin
+extern byte pinTrigger3;	//the 2nd cam sensor pin
+extern byte pinTPS;//TPS input pin
+extern byte pinMAP; //MAP sensor pin
+extern byte pinEMAP; //EMAP sensor pin
+extern byte pinMAP2; //2nd MAP sensor (Currently unused)
+extern byte pinIAT; //IAT sensor pin
+extern byte pinCLT; //CLS sensor pin
+extern byte pinO2; //O2 Sensor pin
+extern byte pinO2_2; //second O2 pin
+extern byte pinBat; //Battery voltage pin
+extern byte pinDisplayReset; // OLED reset pin
+extern byte pinTachOut; //Tacho output
+extern byte pinFuelPump; //Fuel pump on/off
+extern byte pinIdle1; //Single wire idle control
+extern byte pinIdle2; //2 wire idle control (Not currently used)
+extern byte pinIdleUp; //Input for triggering Idle Up
+extern byte pinCTPS; //Input for triggering closed throttle state
+extern byte pinFuel2Input; //Input for switching to the 2nd fuel table
+extern byte pinSpareTemp1; // Future use only
+extern byte pinSpareTemp2; // Future use only
+extern byte pinSpareOut1; //Generic output
+extern byte pinSpareOut2; //Generic output
+extern byte pinSpareOut3; //Generic output
+extern byte pinSpareOut4; //Generic output
+extern byte pinSpareOut5; //Generic output
+extern byte pinSpareOut6; //Generic output
+extern byte pinSpareHOut1; //spare high current output
+extern byte pinSpareHOut2; // spare high current output
+extern byte pinSpareLOut1; // spare low current output
+extern byte pinSpareLOut2; // spare low current output
+extern byte pinSpareLOut3;
+extern byte pinSpareLOut4;
+extern byte pinSpareLOut5;
+extern byte pinBoost;
+extern byte pinVVT_1;		// vvt output 1
+extern byte pinVVT_2;		// vvt output 2
+extern byte pinFan;       // Cooling fan output
+extern byte pinStepperDir; //Direction pin for the stepper motor driver
+extern byte pinStepperStep; //Step pin for the stepper motor driver
+extern byte pinStepperEnable; //Turning the DRV8825 driver on/off
+extern byte pinLaunch;
+extern byte pinIgnBypass; //The pin used for an ignition bypass (Optional)
+extern byte pinFlex; //Pin with the flex sensor attached
+extern byte pinBaro; //Pin that an external barometric pressure sensor is attached to (If used)
+extern byte pinResetControl; // Output pin used control resetting the Arduino
+#ifdef USE_MC33810
+  //If the MC33810 IC\s are in use, these are the chip select pins
+  extern byte pinMC33810_1_CS;
+  extern byte pinMC33810_2_CS;
+#endif
+#ifdef USE_SPI_EEPROM
+  extern byte pinSPIFlash_CS;
+#endif
 
-// global variables // from speeduino.ino
-extern struct statuses currentStatus; // from speeduino.ino
-extern struct table3D fuelTable; //16x16 fuel map
-extern struct table3D ignitionTable; //16x16 ignition map
-extern struct table3D afrTable; //16x16 afr target map
-extern struct table3D stagingTable; //8x8 afr target map
-extern struct table2D taeTable; //4 bin TPS Acceleration Enrichment map (2D)
-extern struct table2D WUETable; //10 bin Warm Up Enrichment map (2D)
-extern struct table2D crankingEnrichTable; //4 bin cranking Enrichment map (2D)
+
+/* global variables */ // from speeduino.ino
+//#ifndef UNIT_TEST
+
+//#endif
+
+extern struct statuses currentStatus; //The global status object
 extern struct config2 configPage2;
 extern struct config4 configPage4;
 extern struct config6 configPage6;
 extern struct config9 configPage9;
 extern struct config10 configPage10;
-extern unsigned long currentLoopTime; //The time the current loop started (uS)
-extern unsigned long previousLoopTime; //The time the previous loop started (uS)
-volatile uint16_t ignitionCount; //The count of ignition events that have taken place since the engine started
-extern byte cltCalibrationTable[CALIBRATION_TABLE_SIZE];
-extern byte iatCalibrationTable[CALIBRATION_TABLE_SIZE];
-extern byte o2CalibrationTable[CALIBRATION_TABLE_SIZE];
+extern byte cltCalibrationTable[CALIBRATION_TABLE_SIZE]; /**< An array containing the coolant sensor calibration values */
+extern byte iatCalibrationTable[CALIBRATION_TABLE_SIZE]; /**< An array containing the inlet air temperature sensor calibration values */
+extern byte o2CalibrationTable[CALIBRATION_TABLE_SIZE]; /**< An array containing the O2 sensor calibration values */
+
+static_assert(sizeof(struct config2) == 128, "configPage2 size is not 128");
+static_assert(sizeof(struct config4) == 128, "configPage4 size is not 128");
+static_assert(sizeof(struct config6) == 128, "configPage6 size is not 128");
+static_assert(sizeof(struct config9) == 192, "configPage9 size is not 192");
+static_assert(sizeof(struct config10) == 192, "configPage10 size is not 192");
 
 #endif // GLOBALS_H

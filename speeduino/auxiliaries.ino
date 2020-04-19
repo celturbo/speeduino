@@ -7,10 +7,12 @@ A full copy of the license may be found in the projects root directory
 #include "auxiliaries.h"
 #include "maths.h"
 #include "src/PID_v1/PID_v1.h"
+#include "decoders.h"
 
 //Old PID method. Retained incase the new one has issues
 //integerPID boostPID(&MAPx100, &boost_pwm_target_value, &boostTargetx100, configPage6.boostKP, configPage6.boostKI, configPage6.boostKD, DIRECT);
 integerPID_ideal boostPID(&currentStatus.MAP, &currentStatus.boostDuty , &currentStatus.boostTarget, &configPage10.boostSens, &configPage10.boostIntv, configPage6.boostKP, configPage6.boostKI, configPage6.boostKD, DIRECT); //This is the PID object if that algorithm is used. Needs to be global as it maintains state outside of each function call
+integerPID vvtPID(&currentStatus.vvtAngle, &vvt_pwm_value, &vvt_pid_target_angle, configPage10.vvtCLKP, configPage10.vvtCLKI, configPage10.vvtCLKD, DIRECT); //This is the PID object if that algorithm is used. Needs to be global as it maintains state outside of each function call
 
 /*
 Fan control
@@ -32,15 +34,19 @@ void fanControl()
   {
     int onTemp = (int)configPage6.fanSP - CALIBRATION_TEMPERATURE_OFFSET;
     int offTemp = onTemp - configPage6.fanHyster;
+    bool fanPermit = false;
 
-    if ( currentStatus.coolant >= onTemp )
+    if ( configPage2.fanWhenOff == true) { fanPermit = true; }
+    else { fanPermit = BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN); }
+
+    if ( (currentStatus.coolant >= onTemp) && (fanPermit == true) )
     {
       //Fan needs to be turned on. Checked for normal or inverted fan signal
       if( configPage6.fanInv == 0 ) { FAN_PIN_HIGH(); }
       else { FAN_PIN_LOW(); }
       currentStatus.fanOn = true;
     }
-    else if ( currentStatus.coolant <= offTemp )
+    else if ( (currentStatus.coolant <= offTemp) || (!fanPermit) )
     {
       //Fan needs to be turned off. Checked for normal or inverted fan signal
       if( configPage6.fanInv == 0 ) { FAN_PIN_LOW(); } 
@@ -52,30 +58,6 @@ void fanControl()
 
 void initialiseAuxPWM()
 {
-  #if defined(CORE_AVR)
-    TCCR1B = 0x00;          //Disbale Timer1 while we set it up
-    TCNT1  = 0;             //Reset Timer Count
-    TIFR1  = 0x00;          //Timer1 INT Flag Reg: Clear Timer Overflow Flag
-    TCCR1A = 0x00;          //Timer1 Control Reg A: Wave Gen Mode normal (Simply counts up from 0 to 65535 (16-bit int)
-    TCCR1B = (1 << CS12);   //Timer1 Control Reg B: Timer Prescaler set to 256. 1 tick = 16uS. Refer to http://www.instructables.com/files/orig/F3T/TIKL/H3WSA4V7/F3TTIKLH3WSA4V7.jpg
-  #elif defined(CORE_TEENSY)
-    //FlexTimer 1 is used for boost and VVT. There are 8 channels on this module
-    FTM1_MODE |= FTM_MODE_WPDIS; // Write Protection Disable
-    FTM1_MODE |= FTM_MODE_FTMEN; //Flex Timer module enable
-    FTM1_MODE |= FTM_MODE_INIT;
-    FTM1_SC |= FTM_SC_CLKS(0b1); // Set internal clocked
-    FTM1_SC |= FTM_SC_PS(0b111); //Set prescaler to 128 (2.1333uS tick time)
-
-    //Enable each compare channel individually
-    FTM1_C0SC &= ~FTM_CSC_MSB; //According to Pg 965 of the K64 datasheet, this should not be needed as MSB is reset to 0 upon reset, but the channel interrupt fails to fire without it
-    FTM1_C0SC |= FTM_CSC_MSA; //Enable Compare mode
-    FTM1_C0SC |= FTM_CSC_CHIE; //Enable channel compare interrupt
-    FTM1_C1SC &= ~FTM_CSC_MSB; //According to Pg 965 of the K64 datasheet, this should not be needed as MSB is reset to 0 upon reset, but the channel interrupt fails to fire without it
-    FTM1_C1SC |= FTM_CSC_MSA; //Enable Compare mode
-    FTM1_C1SC |= FTM_CSC_CHIE; //Enable channel compare interrupt
-
-  #endif
-
   boost_pin_port = portOutputRegister(digitalPinToPort(pinBoost));
   boost_pin_mask = digitalPinToBitMask(pinBoost);
   vvt_pin_port = portOutputRegister(digitalPinToPort(pinVVT_1));
@@ -93,30 +75,38 @@ void initialiseAuxPWM()
     if(configPage10.n2o_pin_polarity == 1) { pinMode(configPage10.n2o_arming_pin, INPUT_PULLUP); }
     else { pinMode(configPage10.n2o_arming_pin, INPUT); }
   }
-  
-
-  #if defined(CORE_STM32) || defined(CORE_TEENSY) //2uS resolution Min 8Hz, Max 5KHz
-    boost_pwm_max_count = 1000000L / (2 * configPage6.boostFreq * 2); //Converts the frequency in Hz to the number of ticks (at 2uS) it takes to complete 1 cycle. The x2 is there because the frequency is stored at half value (in a byte) to allow freqneucies up to 511Hz
-    vvt_pwm_max_count = 1000000L / (2 * configPage6.vvtFreq * 2); //Converts the frequency in Hz to the number of ticks (at 2uS) it takes to complete 1 cycle
-  #else
-    boost_pwm_max_count = 1000000L / (16 * configPage6.boostFreq * 2); //Converts the frequency in Hz to the number of ticks (at 16uS) it takes to complete 1 cycle. The x2 is there because the frequency is stored at half value (in a byte) to allow freqneucies up to 511Hz
-    vvt_pwm_max_count = 1000000L / (16 * configPage6.vvtFreq * 2); //Converts the frequency in Hz to the number of ticks (at 16uS) it takes to complete 1 cycle
-  #endif
-  ENABLE_VVT_TIMER(); //Turn on the B compare unit (ie turn on the interrupt)
 
   boostPID.SetOutputLimits(configPage2.boostMinDuty, configPage2.boostMaxDuty);
-  if(configPage6.boostMode == BOOST_MODE_SIMPLE) { boostPID.SetTunings(100, 100, 100); }
+  if(configPage6.boostMode == BOOST_MODE_SIMPLE) { boostPID.SetTunings(SIMPLE_BOOST_P, SIMPLE_BOOST_I, SIMPLE_BOOST_D); }
   else { boostPID.SetTunings(configPage6.boostKP, configPage6.boostKI, configPage6.boostKD); }
+
+  if( configPage6.vvtEnabled > 0)
+  {
+    currentStatus.vvtAngle = 0;
+
+    #if defined(CORE_AVR)
+      vvt_pwm_max_count = 1000000L / (16 * configPage6.vvtFreq * 2); //Converts the frequency in Hz to the number of ticks (at 16uS) it takes to complete 1 cycle. Note that the frequency is divided by 2 coming from TS to allow for up to 512hz
+    #elif defined(CORE_TEENSY)
+      vvt_pwm_max_count = 1000000L / (32 * configPage6.vvtFreq * 2); //Converts the frequency in Hz to the number of ticks (at 16uS) it takes to complete 1 cycle. Note that the frequency is divided by 2 coming from TS to allow for up to 512hz
+    #endif
+
+    if(configPage6.vvtMode == VVT_MODE_CLOSED_LOOP)
+    {
+      vvtPID.SetOutputLimits(0, percentage(80, vvt_pwm_max_count)); //80% is a completely arbitrary amount for the max duty cycle, but seems inline with most VVT documentation
+      vvtPID.SetTunings(configPage10.vvtCLKP, configPage10.vvtCLKI, configPage10.vvtCLKD);
+      vvtPID.SetSampleTime(30);
+      vvtPID.SetMode(AUTOMATIC); //Turn PID on
+    }
+
+    currentStatus.vvtDuty = 0;
+    vvt_pwm_value = 0;
+  }
+  ENABLE_VVT_TIMER(); //Turn on the B compare unit (ie turn on the interrupt)
 
   currentStatus.boostDuty = 0;
   boostCounter = 0;
-  #if defined(CORE_STM32) //Need to be initialised last due to instant interrupt
-    Timer1.setMode(2, TIMER_OUTPUT_COMPARE);
-    Timer1.setMode(3, TIMER_OUTPUT_COMPARE);
-    if(boost_pwm_max_count > 0) { Timer1.attachInterrupt(2, boostInterrupt);}
-    if(vvt_pwm_max_count > 0) { Timer1.attachInterrupt(3, vvtInterrupt);}
-    Timer1.resume();
-  #endif
+  currentStatus.vvtDuty = 0;
+  vvtCounter = 0;
 
   currentStatus.nitrous_status = NITROUS_OFF;
 
@@ -162,7 +152,7 @@ void boostControl()
           {
             boostPID.SetOutputLimits(configPage2.boostMinDuty, configPage2.boostMaxDuty);
 
-            if(configPage6.boostMode == BOOST_MODE_SIMPLE) { boostPID.SetTunings(100, 100, 100); }
+            if(configPage6.boostMode == BOOST_MODE_SIMPLE) { boostPID.SetTunings(SIMPLE_BOOST_P, SIMPLE_BOOST_I, SIMPLE_BOOST_D); }
             else { boostPID.SetTunings(configPage6.boostKP, configPage6.boostKI, configPage6.boostKD); }
           }
 
@@ -201,32 +191,102 @@ void boostControl()
 
 void vvtControl()
 {
-  if( configPage6.vvtEnabled == 1 )
+  if( (configPage6.vvtEnabled == 1) && (currentStatus.RPM > 0) )
   {
-    byte vvtDuty = get3DTableValue(&vvtTable, currentStatus.TPS, currentStatus.RPM);
+    currentStatus.vvtDuty = 0;
+    if( (configPage6.vvtMode == VVT_MODE_OPEN_LOOP) || (configPage6.vvtMode == VVT_MODE_ONOFF) )
+    {
+      //Lookup VVT duty based on either MAP or TPS
+      if(configPage6.vvtLoadSource == VVT_LOAD_TPS)
+      {
+        currentStatus.vvtDuty = get3DTableValue(&vvtTable, currentStatus.TPS, currentStatus.RPM);
+      }
+      else
+      {
+        currentStatus.vvtDuty = get3DTableValue(&vvtTable, currentStatus.MAP, currentStatus.RPM);
+      }
 
-    //VVT table can be used for controlling on/off switching. If this is turned on, then disregard any interpolation or non-binary values
-    if( (configPage6.VVTasOnOff == true) && (vvtDuty < 100) ) { vvtDuty = 0; }
+      //VVT table can be used for controlling on/off switching. If this is turned on, then disregard any interpolation or non-binary values
+      if( (configPage6.VVTasOnOff == true) && (currentStatus.vvtDuty < 100) ) { currentStatus.vvtDuty = 0; }
 
-    if(vvtDuty == 0)
+      vvt_pwm_value = percentage(currentStatus.vvtDuty, vvt_pwm_max_count);
+      if(currentStatus.vvtDuty > 0) { ENABLE_VVT_TIMER(); }
+
+    } //Open loop
+    else if( (configPage6.vvtMode == VVT_MODE_CLOSED_LOOP) )
+    {
+      //Calculate the current cam angle
+      getCamAngle_Miata9905();
+
+      //Lookup VVT duty based on either MAP or TPS
+      if(configPage6.vvtLoadSource == VVT_LOAD_TPS)
+      {
+        currentStatus.vvtTargetAngle = get3DTableValue(&vvtTable, currentStatus.TPS, currentStatus.RPM);
+      }
+      else
+      {
+        currentStatus.vvtTargetAngle = get3DTableValue(&vvtTable, currentStatus.MAP, currentStatus.RPM);
+      }
+
+      if( (vvtCounter & 31) == 1) { vvtPID.SetTunings(configPage10.vvtCLKP, configPage10.vvtCLKI, configPage10.vvtCLKD); } //This only needs to be run very infrequently, once every 32 calls to vvtControl(). This is approx. once per second
+
+      //Check that we're not already at the angle we want to be
+      if((configPage6.vvtCLUseHold > 0) && (currentStatus.vvtTargetAngle == currentStatus.vvtAngle) )
+      {
+        currentStatus.vvtDuty = configPage10.vvtCLholdDuty;
+        vvt_pwm_value = percentage(currentStatus.vvtDuty, vvt_pwm_max_count);
+        vvtPID.Initialize();
+      }
+      else
+      {
+        //If not already at target angle, calculate new value from PID
+
+        //This is dumb, but need to convert the current angle into a long pointer
+        vvt_pid_target_angle = currentStatus.vvtTargetAngle;
+
+        if(currentStatus.vvtTargetAngle > 0)
+        {
+          bool PID_compute = vvtPID.Compute(false);
+          //vvtPID.Compute2(currentStatus.vvtTargetAngle, currentStatus.vvtAngle, false);
+          //vvt_pwm_target_value = percentage(40, vvt_pwm_max_count);
+          //if (currentStatus.vvtAngle > currentStatus.vvtTargetAngle) { vvt_pwm_target_value = 0; }
+          if(PID_compute == true) { currentStatus.vvtDuty = (vvt_pwm_value * 100) / vvt_pwm_max_count; }
+          
+        }
+        else
+        {
+          currentStatus.vvtDuty = 0;
+        }
+      }
+      
+      if(currentStatus.vvtDuty > 0) { ENABLE_VVT_TIMER(); }
+      
+      //currentStatus.vvtDuty = 0;
+      vvtCounter++;
+    }
+
+    //Set the PWM state based on the above lookups
+    if(currentStatus.vvtDuty == 0)
     {
       //Make sure solenoid is off (0% duty)
       VVT_PIN_LOW();
       DISABLE_VVT_TIMER();
     }
-    else if (vvtDuty >= 100)
+    else if (currentStatus.vvtDuty >= 100)
     {
       //Make sure solenoid is on (100% duty)
       VVT_PIN_HIGH();
       DISABLE_VVT_TIMER();
     }
-    else
-    {
-      vvt_pwm_target_value = percentage(vvtDuty, vvt_pwm_max_count);
-      ENABLE_VVT_TIMER();
-    }
+ 
   }
-  else { DISABLE_VVT_TIMER(); } // Disable timer channel
+  else 
+  { 
+    // Disable timer channel
+    DISABLE_VVT_TIMER(); 
+    currentStatus.vvtDuty = 0;
+    vvt_pwm_value = 0;
+  } 
 }
 
 void nitrousControl()
@@ -240,14 +300,21 @@ void nitrousControl()
     //Perform the main checks to see if nitrous is ready
     if( (isArmed == true) && (currentStatus.coolant > (configPage10.n2o_minCLT - CALIBRATION_TEMPERATURE_OFFSET)) && (currentStatus.TPS > configPage10.n2o_minTPS) && (currentStatus.O2 < configPage10.n2o_maxAFR) && (currentStatus.MAP < configPage10.n2o_maxMAP) )
     {
+      //Config page values are divided by 100 to fit within a byte. Multiply them back out to real values. 
       uint16_t realStage1MinRPM = (uint16_t)configPage10.n2o_stage1_minRPM * 100;
       uint16_t realStage1MaxRPM = (uint16_t)configPage10.n2o_stage1_maxRPM * 100;
       uint16_t realStage2MinRPM = (uint16_t)configPage10.n2o_stage2_minRPM * 100;
       uint16_t realStage2MaxRPM = (uint16_t)configPage10.n2o_stage2_maxRPM * 100;
 
+      //The nitrous state is set to 0 and then the subsequent stages are added
+      // OFF    = 0
+      // STAGE1 = 1
+      // STAGE2 = 2
+      // BOTH   = 3 (ie STAGE1 + STAGE2 = BOTH)
+      currentStatus.nitrous_status = NITROUS_OFF;
       if( (currentStatus.RPM > realStage1MinRPM) && (currentStatus.RPM < realStage1MaxRPM) )
       {
-        currentStatus.nitrous_status = NITROUS_STAGE1;
+        currentStatus.nitrous_status += NITROUS_STAGE1;
         BIT_SET(currentStatus.status3, BIT_STATUS3_NITROUS);
         N2O_STAGE1_PIN_HIGH();
         nitrousOn = true;
@@ -256,7 +323,7 @@ void nitrousControl()
       {
         if( (currentStatus.RPM > realStage2MinRPM) && (currentStatus.RPM < realStage2MaxRPM) )
         {
-          currentStatus.nitrous_status = NITROUS_STAGE2;
+          currentStatus.nitrous_status += NITROUS_STAGE2;
           BIT_SET(currentStatus.status3, BIT_STATUS3_NITROUS);
           N2O_STAGE2_PIN_HIGH();
           nitrousOn = true;
@@ -266,12 +333,16 @@ void nitrousControl()
   }
 
   if (nitrousOn == false)
+  {
+    currentStatus.nitrous_status = NITROUS_OFF;
+    BIT_CLEAR(currentStatus.status3, BIT_STATUS3_NITROUS);
+
+    if(configPage10.n2o_enable > 0)
     {
-      currentStatus.nitrous_status = NITROUS_OFF;
-      BIT_CLEAR(currentStatus.status3, BIT_STATUS3_NITROUS);
       N2O_STAGE1_PIN_LOW();
       N2O_STAGE2_PIN_LOW();
     }
+  }
 }
 
 void boostDisable()
@@ -285,7 +356,7 @@ void boostDisable()
 //The interrupt to control the Boost PWM
 #if defined(CORE_AVR)
   ISR(TIMER1_COMPA_vect)
-#elif defined (CORE_TEENSY) || defined(CORE_STM32)
+#else
   static inline void boostInterrupt() //Most ARM chips can simply call a function
 #endif
 {
@@ -307,7 +378,7 @@ void boostDisable()
 //The interrupt to control the VVT PWM
 #if defined(CORE_AVR)
   ISR(TIMER1_COMPB_vect)
-#elif defined (CORE_TEENSY) || defined(CORE_STM32)
+#else
   static inline void vvtInterrupt() //Most ARM chips can simply call a function
 #endif
 {
@@ -320,13 +391,13 @@ void boostDisable()
   else
   {
     VVT_PIN_HIGH();  // Switch pin high
-    VVT_TIMER_COMPARE = VVT_TIMER_COUNTER + vvt_pwm_target_value;
-    vvt_pwm_cur_value = vvt_pwm_target_value;
+    VVT_TIMER_COMPARE = VVT_TIMER_COUNTER + vvt_pwm_value;
+    vvt_pwm_cur_value = vvt_pwm_value;
     vvt_pwm_state = true;
   }
 }
 
-#if defined(CORE_TEENSY)
+#if defined(CORE_TEENSY35)
 void ftm1_isr(void)
 {
   //FTM1 only has 2 compare channels
@@ -338,4 +409,6 @@ void ftm1_isr(void)
   else if(interrupt2) { FTM1_C1SC &= ~FTM_CSC_CHF; vvtInterrupt(); }
 
 }
+#elif defined(CORE_TEENSY40)
+//DO STUFF HERE
 #endif
