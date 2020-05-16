@@ -94,9 +94,6 @@ class integerPID
         byte, byte, byte, byte);     //   Setpoint.  Initial tuning parameters are also set here
 
     void SetMode(int Mode);               // * sets PID to either Manual (0) or Auto (non-0)
-    void setFroCrank( unsigned long); 
-    void SetPos();
-    void CapterPos();//Capture the current position in PID.
 
     bool Compute(bool pOnE);                       // * performs the PID calculation.  it should be
                                           //   called every time loop() cycles. ON/OFF and
@@ -145,8 +142,7 @@ class integerPID
                                   //   what these values are.  with pointers we'll just know.
 
 	unsigned long lastTime;
-	long outputSum, lastInput, lastMinusOneInput,LastoutputSum;
-  bool control;
+	long outputSum, lastInput, lastMinusOneInput;
   int16_t lastError;
 
 	uint16_t SampleTime;
