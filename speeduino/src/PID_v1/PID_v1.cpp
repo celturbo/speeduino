@@ -292,7 +292,7 @@ bool integerPID::Compute(bool pOnE)
 
 void integerPID::setFroCrank( unsigned long idleset)
  {
-   idleset=((idleset*1000UL));
+   idleset=((idleset<<10));
    outputSum =idleset;
 
  }

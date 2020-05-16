@@ -477,7 +477,7 @@ Performs a step
 */
 static inline void doStep()
 {    //If Crank ignores hysteresis check
-  if ( BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK )||((idleStepper.targetIdleStep <= (idleStepper.curIdleStep - configPage6.iacStepHyster)) || (idleStepper.targetIdleStep >= (idleStepper.curIdleStep + configPage6.iacStepHyster))) ) //Hysteris check
+  if (BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK )||((idleStepper.targetIdleStep <= (idleStepper.curIdleStep - configPage6.iacStepHyster)) || (idleStepper.targetIdleStep >= (idleStepper.curIdleStep + configPage6.iacStepHyster))) ) //Hysteris check
   {
     // the home position for a stepper is pintle fully seated, i.e. no airflow.
     if(idleStepper.targetIdleStep < idleStepper.curIdleStep)
