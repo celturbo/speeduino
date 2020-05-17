@@ -276,6 +276,7 @@ bool integerPID::Compute(bool pOnE)
          output = outputSum - ((kd * dInput)/128);
       }
       
+        output=(output>>10);
 
 	   if(output > outMax) output = outMax;
       else if(output < outMin) output = outMin;
