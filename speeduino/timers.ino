@@ -16,6 +16,7 @@ Timers are typically low resolution (Compared to Schedulers), with maximum frequ
 #include "scheduler.h"
 #include "scheduledIO.h"
 #include "speeduino.h"
+#include "scheduler.h"
 #include "auxiliaries.h"
 
 #if defined(CORE_AVR)
@@ -62,6 +63,9 @@ void oneMSInterval() //Most ARM chips can simply call a function
   if(ignitionSchedule3.Status == RUNNING) { if( (ignitionSchedule3.startTime < targetOverdwellTime) && (configPage4.useDwellLim) && (isCrankLocked != true) ) { ign3EndFunction(); ignitionSchedule3.Status = OFF; } }
   if(ignitionSchedule4.Status == RUNNING) { if( (ignitionSchedule4.startTime < targetOverdwellTime) && (configPage4.useDwellLim) && (isCrankLocked != true) ) { ign4EndFunction(); ignitionSchedule4.Status = OFF; } }
   if(ignitionSchedule5.Status == RUNNING) { if( (ignitionSchedule5.startTime < targetOverdwellTime) && (configPage4.useDwellLim) && (isCrankLocked != true) ) { ign5EndFunction(); ignitionSchedule5.Status = OFF; } }
+  if(ignitionSchedule6.Status == RUNNING) { if( (ignitionSchedule6.startTime < targetOverdwellTime) && (configPage4.useDwellLim) && (isCrankLocked != true) ) { ign6EndFunction(); ignitionSchedule6.Status = OFF; } }
+  if(ignitionSchedule7.Status == RUNNING) { if( (ignitionSchedule7.startTime < targetOverdwellTime) && (configPage4.useDwellLim) && (isCrankLocked != true) ) { ign7EndFunction(); ignitionSchedule7.Status = OFF; } }
+  if(ignitionSchedule8.Status == RUNNING) { if( (ignitionSchedule8.startTime < targetOverdwellTime) && (configPage4.useDwellLim) && (isCrankLocked != true) ) { ign8EndFunction(); ignitionSchedule8.Status = OFF; } }
 
   //Tacho output check
   //Tacho is flagged as being ready for a pulse by the ignition outputs. 
@@ -117,6 +121,8 @@ void oneMSInterval() //Most ARM chips can simply call a function
 
     currentStatus.rpmDOT = (currentStatus.RPM - lastRPM_100ms) * 10; //This is the RPM per second that the engine has accelerated/decelleratedin the last loop
     lastRPM_100ms = currentStatus.RPM; //Record the current RPM for next calc
+    if ( BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN) ) { runSecsX10++; }
+    else { runSecsX10 = 0; }
   }
 
   //Loop executed every 250ms loop (1ms x 250 = 250ms)
@@ -218,6 +224,33 @@ void oneMSInterval() //Most ARM chips can simply call a function
       //Off by 1 error check
       if (currentStatus.ethanolPct == 1) { currentStatus.ethanolPct = 0; }
 
+    }
+
+    //**************************************************************************************************************************************************
+    //Handle any of the hardware testing outputs
+    if( BIT_CHECK(currentStatus.testOutputs, 1) )
+    {
+      //Check whether any of the fuel outputs is on
+
+      //Check for injector outputs on 50%
+      if(BIT_CHECK(HWTest_INJ_50pc, 1)) { injector1Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 2)) { injector2Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 3)) { injector3Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 4)) { injector4Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 5)) { injector5Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 6)) { injector6Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 7)) { injector7Toggle(); }
+      if(BIT_CHECK(HWTest_INJ_50pc, 8)) { injector8Toggle(); }
+
+      //Check for ignition outputs on 50%
+      if(BIT_CHECK(HWTest_IGN_50pc, 1)) { coil1Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 2)) { coil2Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 3)) { coil3Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 4)) { coil4Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 5)) { coil5Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 6)) { coil6Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 7)) { coil7Toggle(); }
+      if(BIT_CHECK(HWTest_IGN_50pc, 8)) { coil8Toggle(); }
     }
 
   }

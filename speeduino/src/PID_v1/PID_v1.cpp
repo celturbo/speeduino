@@ -246,12 +246,19 @@ bool integerPID::Compute(bool pOnE)
    {
       /*Compute all the working error variables*/
 	  long input = *myInput;
+
+     if (input==(lastInput+3000)||input<=10)/*Anti-spike filter*/
+      {input=lastInput;
+      }
+      
       long error = *mySetpoint - input;
       long dInput = (input - lastInput);
 
-      outputSum += (ki * error)/1024; //Note that ki is multiplied by 1024 so it must be divided by 1024 here
-      if(outputSum > outMax) { outputSum = outMax; }
-      else if(outputSum < outMin) { outputSum = outMin; }
+      outputSum +=(((ki * (error))/1024)/10);//Note that ki is multiplied by 1024 so it must be divided by 1024 here
+      
+        
+     if(outputSum > outMax*1000) { outputSum = outMax*1000; }
+      else if(outputSum < outMin*1000) { outputSum = outMin*1000; }
       
       /*Compute PID Output*/
       long output;
@@ -269,6 +276,7 @@ bool integerPID::Compute(bool pOnE)
          output = outputSum - ((kd * dInput)/128);
       }
       
+        output=(output>>10);
 
 	   if(output > outMax) output = outMax;
       else if(output < outMin) output = outMin;
@@ -283,7 +291,35 @@ bool integerPID::Compute(bool pOnE)
    else return false;
 }
 
+void integerPID::setFroCrank( unsigned long idleset)
+ {
+   idleset=((idleset<<10));
+   outputSum =idleset;
 
+ }
+
+
+
+//Capture position instantly
+void integerPID::CapterPos()
+{
+    
+if (control==false)
+   {
+   LastoutputSum=outputSum;
+   control=true;
+   } 
+}
+
+//Set the captured position
+void integerPID::SetPos()
+{
+   if (control==true)
+  {
+  outputSum= LastoutputSum;
+   control=false;
+  }
+}
 
 /* SetTunings(...)*************************************************************
  * This function allows the controller's dynamic performance to be adjusted.
