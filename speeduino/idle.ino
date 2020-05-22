@@ -494,6 +494,7 @@ static inline void doStep()
       idleStepper.curIdleStep++;
     }
 
+    
     digitalWrite(pinStepperEnable, LOW); //Enable the DRV8825
     digitalWrite(pinStepperStep, HIGH);
     idleStepper.stepStartTime = micros_safe();
