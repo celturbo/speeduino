@@ -321,6 +321,8 @@ extern struct table2D flexAdvTable;   //6 bin flex fuel correction table for tim
 extern struct table2D flexBoostTable; //6 bin flex fuel correction table for boost adjustments (2D)
 extern struct table2D knockWindowStartTable;
 extern struct table2D knockWindowDurationTable;
+extern struct table2D antiJerkTable; //4 bin Anti-jerk correction table for timing advance (2D)
+extern struct table2D antiJerkTaperTable; //4 bin Anti-jerk taper table (2D)
 
 //These are for the direct port manipulation of the injectors, coils and aux outputs
 extern volatile PORT_TYPE *inj1_pin_port;
@@ -419,6 +421,7 @@ extern int CRANK_ANGLE_MAX;
 extern int CRANK_ANGLE_MAX_IGN;
 extern int CRANK_ANGLE_MAX_INJ; //The number of crank degrees that the system track over. 360 for wasted / timed batch and 720 for sequential
 extern volatile uint32_t runSecsX10; /**< Counter of seconds since cranking commenced (similar to runSecs) but in increments of 0.1 seconds */
+extern volatile uint32_t seclx10; /**< Counter of seconds since started (similar to secl) but in increments of 0.1 seconds */
 extern volatile byte HWTest_INJ; /**< Each bit in this variable represents one of the injector channels and it's HW test status */
 extern volatile byte HWTest_INJ_50pc; /**< Each bit in this variable represents one of the injector channels and it's 50% HW test status */
 extern volatile byte HWTest_IGN; /**< Each bit in this variable represents one of the ignition channels and it's HW test status */
@@ -1065,7 +1068,11 @@ struct config10 {
   uint16_t vvtCLMaxAng; //Bytes 132-133
 
   byte crankingEnrichTaper; //Byte 134
-  byte unused11_135_191[57]; //Bytes 135-191
+  byte antiJerkValues[4];   //Byte 135-138
+  byte antiJerkTaper[4];    //Byte 139-142
+  byte antiJerkStartRPM;    //Byte 143
+  byte antiJerkFinalRPM;    //Byte 144
+  byte unused11_135_191[47]; //Bytes 145-191
 
 #if defined(CORE_AVR)
   };
