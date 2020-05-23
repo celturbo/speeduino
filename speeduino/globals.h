@@ -165,7 +165,7 @@
 #define BIT_STATUS3_NITROUS       1
 #define BIT_STATUS3_FUEL2_ACTIVE  2
 #define BIT_STATUS3_VSS_REFRESH   3
-#define BIT_STATUS3_UNUSED4       4
+#define BIT_STATUS3_CLIDLE        4
 #define BIT_STATUS3_NSQUIRTS1     5
 #define BIT_STATUS3_NSQUIRTS2     6
 #define BIT_STATUS3_NSQUIRTS3     7
@@ -921,10 +921,10 @@ struct config9 {
 
   byte iacMaxSteps; // Step limit beyond which the stepper won't be driven. Should always be less than homing steps. Stored div 3 as per home steps.
 
-  byte unused10_155;
-  byte unused10_156;
-  byte unused10_157;
-  byte unused10_158;
+  byte idlePidTimeDelay;
+  byte idlePidRpmdotDisable;
+  byte idlePidTpsDisable;
+  byte iacMinSteps;
   byte unused10_159;
   byte unused10_160;
   byte unused10_161;
