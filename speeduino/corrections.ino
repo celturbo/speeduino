@@ -31,6 +31,8 @@ int16_t knockWindowMin; //The current minimum crank angle for a knock pulse to b
 int16_t knockWindowMax;//The current maximum crank angle for a knock pulse to be valid
 byte aseTsnStart;
 uint16_t dfcoStart;
+uint16_t ajStartValue;
+byte ajTpsDOT;
 
 void initialiseCorrections()
 {
@@ -64,8 +66,11 @@ uint16_t correctionsFuel()
   if (activeCorrections == MAX_CORRECTIONS) { sumCorrections = sumCorrections / powint(100,activeCorrections); activeCorrections = 0; } // Need to check this to ensure that sumCorrections doesn't overflow. Can occur when the number of corrections is greater than 3 (Which is 100^4) as 100^5 can overflow
 
   currentStatus.AEamount = correctionAccel();
+  if (configPage2.aeApplyMode == AE_MODE_MULTIPLIER)
+  {
   if (currentStatus.AEamount != 100) { sumCorrections = (sumCorrections * currentStatus.AEamount); activeCorrections++; }
   if (activeCorrections == MAX_CORRECTIONS) { sumCorrections = sumCorrections / powint(100,activeCorrections); activeCorrections = 0; }
+  }
 
   result = correctionFloodClear();
   if (result != 100) { sumCorrections = (sumCorrections * result); activeCorrections++; }
@@ -613,6 +618,7 @@ int8_t correctionsIgn(int8_t base_advance)
   advance = correctionSoftLaunch(advance);
   advance = correctionSoftFlatShift(advance);
   advance = correctionKnock(advance);
+  advance = correctionAntiJerk(advance);
 
   //Fixed timing check must go last
   advance = correctionFixedTiming(advance);
@@ -824,4 +830,27 @@ uint16_t correctionsDwell(uint16_t dwell)
     tempDwell = (revolutionTime / pulsesPerRevolution) - (configPage4.sparkDur * 100);
   }
   return tempDwell;
+}
+
+int8_t correctionAntiJerk(int8_t advance)
+{
+  int8_t antiJerkRetard = 0;
+  if ( ((ajTpsDOT > 0) || (currentStatus.tpsDOT > 0)) && (((currentStatus.RPM/100) >= configPage10.antiJerkStartRPM) || ((currentStatus.RPM/100) <= configPage10.antiJerkFinalRPM)) )
+  {
+    if ( ajTpsDOT == 0 )
+    { 
+      ajTpsDOT = currentStatus.tpsDOT;
+      ajStartValue = seclx10;
+    }
+    uint16_t taperTime = table2D_getValue(&antiJerkTaperTable, ajTpsDOT);
+    int8_t maxRetard = table2D_getValue(&antiJerkTable, ajTpsDOT);
+    if ( (taperTime > 0) && (maxRetard != 0) && (((uint16_t)seclx10 - ajStartValue) < taperTime) )
+    {
+      //BIT_SET(currentStatus.spark2, BIT_SPARK2_ANTIJERK);
+      antiJerkRetard = map((uint16_t)seclx10, ajStartValue, taperTime, maxRetard, 0);
+      if ( antiJerkRetard == 0 ) { ajTpsDOT = 0; }
+    }
+  }
+  //else { BIT_CLEAR(currentStatus.spark2, BIT_SPARK2_ANTIJERK); }
+  return advance - antiJerkRetard;
 }

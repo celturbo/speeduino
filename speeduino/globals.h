@@ -230,6 +230,9 @@
 #define AE_MODE_TPS         0
 #define AE_MODE_MAP         1
 
+#define AE_MODE_MULTIPLIER  0
+#define AE_MODE_ADDER       1
+
 #define KNOCK_MODE_OFF      0
 #define KNOCK_MODE_DIGITAL  1
 #define KNOCK_MODE_ANALOG   2
@@ -321,6 +324,8 @@ extern struct table2D flexAdvTable;   //6 bin flex fuel correction table for tim
 extern struct table2D flexBoostTable; //6 bin flex fuel correction table for boost adjustments (2D)
 extern struct table2D knockWindowStartTable;
 extern struct table2D knockWindowDurationTable;
+extern struct table2D antiJerkTable; //4 bin Anti-jerk correction table for timing advance (2D)
+extern struct table2D antiJerkTaperTable; //4 bin Anti-jerk taper table (2D)
 
 //These are for the direct port manipulation of the injectors, coils and aux outputs
 extern volatile PORT_TYPE *inj1_pin_port;
@@ -556,7 +561,8 @@ struct config2 {
   byte aeMode : 2; /**< Acceleration Enrichment mode. 0 = TPS, 1 = MAP. Values 2 and 3 reserved for potential future use (ie blended TPS / MAP) */
   byte battVCorMode : 1;
   byte SoftLimitMode : 1;
-  byte unused1_3c : 4;
+  byte unused1_3c : 3;
+  byte aeApplyMode : 1;
   byte wueValues[10]; //Warm up enrichment array (10 bytes)
   byte crankingPct; //Cranking enrichment
   byte pinMapping; // The board / ping mapping to be used
@@ -1067,7 +1073,11 @@ struct config10 {
   uint16_t vvtCLMaxAng; //Bytes 132-133
 
   byte crankingEnrichTaper; //Byte 134
-  byte unused11_135_191[57]; //Bytes 135-191
+  byte antiJerkValues[4];   //Byte 135-138
+  byte antiJerkTaper[4];    //Byte 139-142
+  byte antiJerkStartRPM;    //Byte 143
+  byte antiJerkFinalRPM;    //Byte 144
+  byte unused11_135_191[47]; //Bytes 145-191
 
 #if defined(CORE_AVR)
   };
