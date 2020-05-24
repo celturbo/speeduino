@@ -182,6 +182,17 @@ void initialiseAll()
     knockWindowDurationTable.values = configPage10.knock_window_dur;
     knockWindowDurationTable.axisX = configPage10.knock_window_rpms;
 
+    antiJerkTable.valueSize = SIZE_BYTE; //Set this table to use byte values
+    antiJerkTable.axisSize = SIZE_BYTE; //Set this table to use byte axis bins
+    antiJerkTable.xSize = 4;
+    antiJerkTable.values = configPage10.antiJerkValues;
+    antiJerkTable.axisX = configPage4.taeBins;
+    antiJerkTaperTable.valueSize = SIZE_BYTE; //Set this table to use byte values
+    antiJerkTaperTable.axisSize = SIZE_BYTE; //Set this table to use byte axis bins
+    antiJerkTaperTable.xSize = 4;
+    antiJerkTaperTable.values = configPage10.antiJerkTaper;
+    antiJerkTaperTable.axisX = configPage4.taeBins;
+
     //Setup the calibration tables
     loadCalibration();
 

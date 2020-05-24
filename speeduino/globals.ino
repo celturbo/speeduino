@@ -38,6 +38,8 @@ struct table2D flexAdvTable;   //6 bin flex fuel correction table for timing adv
 struct table2D flexBoostTable; //6 bin flex fuel correction table for boost adjustments (2D)
 struct table2D knockWindowStartTable;
 struct table2D knockWindowDurationTable;
+struct table2D antiJerkTable; //4 bin Anti-jerk correction table for timing advance (2D)
+struct table2D antiJerkTaperTable; //4 bin Anti-jerk taper table (2D)
 
 //These are for the direct port manipulation of the injectors, coils and aux outputs
 volatile PORT_TYPE *inj1_pin_port;
@@ -127,6 +129,7 @@ int CRANK_ANGLE_MAX = 720;
 int CRANK_ANGLE_MAX_IGN = 360;
 int CRANK_ANGLE_MAX_INJ = 360; //The number of crank degrees that the system track over. 360 for wasted / timed batch and 720 for sequential
 volatile uint32_t runSecsX10;
+volatile uint32_t seclx10;
 volatile byte HWTest_INJ = 0; /**< Each bit in this variable represents one of the injector channels and it's HW test status */
 volatile byte HWTest_INJ_50pc = 0; /**< Each bit in this variable represents one of the injector channels and it's 50% HW test status */
 volatile byte HWTest_IGN = 0; /**< Each bit in this variable represents one of the ignition channels and it's HW test status */
