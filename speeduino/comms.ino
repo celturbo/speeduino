@@ -626,6 +626,7 @@ void updateFullStatus()
   fullStatus[109] = currentStatus.vvt2TargetAngle;
   fullStatus[110] = currentStatus.vvt2Duty;
   fullStatus[111] = currentStatus.outputsStatus;
+  fullStatus[112] = currentStatus.status4;
 }
 /*
 This function returns the current values of a fixed group of variables
