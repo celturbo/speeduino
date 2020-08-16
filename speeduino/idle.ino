@@ -347,7 +347,8 @@ void idleControl()
       //First thing to check is whether there is currently a step going on and if so, whether it needs to be turned off
       if( (checkForStepping() == false) && (isStepperHomed() == true) ) //Check that homing is complete and that there's not currently a step already taking place. MUST BE IN THIS ORDER!
       {
-        if( BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK) )
+      
+      if ( BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK) || !BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN))
         {
           //Currently cranking. Use the cranking table
           idleStepper.targetIdleStep = table2D_getValue(&iacCrankStepsTable, (currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET)) * 3; //All temps are offset by 40 degrees. Step counts are divided by 3 in TS. Multiply back out here
@@ -363,20 +364,33 @@ void idleControl()
           idle_pid_target_value = idleStepper.targetIdleStep << 2; //Resolution increased
           idlePID.Initialize(); //Update output to smooth transition
         }
-        else 
+        else if (BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN))
         {
           if( (idleCounter & 31) == 1)
           {
             //This only needs to be run very infrequently, once every 32 calls to idleControl(). This is approx. once per second
             idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD);
-            iacStepTime_uS = configPage6.iacStepTime * 1000;
-            iacCoolTime_uS = configPage9.iacCoolTime * 1000;
+            iacStepTime_uS = configPage6.iacStepTime * 6000L;
+            iacCoolTime_uS = configPage9.iacCoolTime * 6000L;
           }
 
           currentStatus.CLIdleTarget = (byte)table2D_getValue(&iacClosedLoopTable, currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET); //All temps are offset by 40 degrees
           idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //All temps are offset by 40 degrees
+
+        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) )
+        {          
           PID_computed = idlePID.Compute(true);
-          idleStepper.targetIdleStep = idle_pid_target_value >> 2; //Increase resolution
+          BIT_SET(currentStatus.status4, BIT_STATUS4_CLIDLE);
+        }
+
+        // Disables PID correction and maintains the position during RPM transients or TPS position.
+        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) ) )
+        {
+          BIT_CLEAR(currentStatus.status4, BIT_STATUS4_CLIDLE);
+          IdleOldTime = runSecsX10;
+                   
+        }
+          idleStepper.targetIdleStep = idle_pid_target_value>>2; //Increase resolution
           if(currentStatus.idleUpActive == true) { idleStepper.targetIdleStep += configPage2.idleUpAdder; } //Add Idle Up amount if active
 
           //limit to the configured max steps. This must include any idle up adder, to prevent over-opening.
@@ -385,6 +399,12 @@ void idleControl()
             idleStepper.targetIdleStep = configPage9.iacMaxSteps * 3;
           }
 
+          if (idleStepper.targetIdleStep < (configPage9.iacMinSteps * 3) )
+          {
+            idleStepper.targetIdleStep = configPage9.iacMinSteps * 3;
+          }
+        
+        
           doStep();
           idleCounter++;
         }
