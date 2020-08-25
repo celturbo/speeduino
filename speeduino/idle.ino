@@ -189,6 +189,16 @@ void idleControl()
   }
   else { currentStatus.idleUpActive = false; }
 
+
+  //check pin Brake
+  if(configPage2.brakeUpEnabled == true)
+  {
+    if(configPage2.brakeUpPolarity == 0) { currentStatus.brakeUpActive = !digitalRead(pinBrakeUp); } //Normal mode (ground switched)
+    else { currentStatus.brakeUpActive = digitalRead(pinBrakeUp); } //Inverted mode (5v activates brake)
+  }
+  else { currentStatus.brakeUpActive = false; }
+
+
   bool PID_computed = false;
   switch(configPage6.iacAlgorithm)
   {
@@ -403,6 +413,12 @@ void idleControl()
           {
             idleStepper.targetIdleStep = configPage9.iacMinSteps * 3;
           }
+             if(currentStatus.brakeUpActive == true)
+          {
+            idleStepper.targetIdleStep = configPage9.brakeUpPosition;
+          }
+
+
                 
           doStep();
           idleCounter++;

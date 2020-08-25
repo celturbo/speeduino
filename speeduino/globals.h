@@ -626,6 +626,7 @@ struct statuses {
   byte vvt2TargetAngle;
   byte vvt2Duty;
   byte outputsStatus;
+  byte brakeUpActive;
 };
 
 /**
@@ -773,8 +774,14 @@ struct config2 {
   uint16_t vssRatio5;
   uint16_t vssRatio6;
 
-  byte unused2_95[9];
+  byte brakeUpPin : 6;
+  byte brakeUpPolarity : 1;
+  byte brakeUpEnabled : 1;
+
+  byte unused2_95[8];
   byte primingDelay;
+
+ 
 
 #if defined(CORE_AVR)
   };
@@ -1010,7 +1017,7 @@ struct config9 {
   byte idlePidRpmdotDisable;
   byte idlePidTpsDisable;
   byte iacMinSteps;
-  byte unused10_159;
+  byte brakeUpPosition;
   byte unused10_160;
   byte unused10_161;
   byte unused10_162;
@@ -1332,6 +1339,7 @@ extern byte pinOilPressure;
 extern byte pinWMIEmpty; // Water tank empty sensor
 extern byte pinWMIIndicator; // No water indicator bulb
 extern byte pinWMIEnabled; // ON-OFF ouput to relay/pump/solenoid 
+extern byte pinBrakeUp;
 #ifdef USE_MC33810
   //If the MC33810 IC\s are in use, these are the chip select pins
   extern byte pinMC33810_1_CS;
