@@ -625,11 +625,12 @@ void updateFullStatus()
   fullStatus[108] = (int8_t)currentStatus.vvt2Angle;
   fullStatus[109] = currentStatus.vvt2TargetAngle;
   fullStatus[110] = currentStatus.vvt2Duty;
-  fullStatus[111] = currentStatus.outputsStatus;
+  fullStatus[111] = currentStatus.outputsStatus;  
   fullStatus[112] = (byte)(currentStatus.fuelTemp + CALIBRATION_TEMPERATURE_OFFSET); //Fuel temperature from flex sensor
   fullStatus[113] = currentStatus.fuelTempCorrection; //Fuel temperature Correction (%)
   fullStatus[114] = currentStatus.advance1; //advance 1 (%)
   fullStatus[115] = currentStatus.advance2; //advance 2 (%)
+  fullStatus[116] = currentStatus.status4;
 }
 /*
 This function returns the current values of a fixed group of variables
