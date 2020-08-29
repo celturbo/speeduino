@@ -363,8 +363,9 @@ void idleControl()
           idle_pid_target_value = idleStepper.targetIdleStep << 2; //Resolution increased
           idlePID.Initialize(); //Update output to smooth transition
         }
-        else 
-        {
+        else if (BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN) && ( runSecsX10 < configPage2.idleTaperTime ))
+        { 
+          
           if( (idleCounter & 31) == 1)
           {
             //This only needs to be run very infrequently, once every 32 calls to idleControl(). This is approx. once per second
