@@ -348,7 +348,7 @@ void idleControl()
       if( (checkForStepping() == false) && (isStepperHomed() == true) ) //Check that homing is complete and that there's not currently a step already taking place. MUST BE IN THIS ORDER!
       {
       
-      if ( BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK) || !BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN))
+      if ( BIT_CHECK(currentStatus.engine, BIT_ENGINE_CRANK) || !BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN) || runSecsX10 < configPage2.idleTaperTime )
         {
           //Currently cranking. Use the cranking table
           idleStepper.targetIdleStep = table2D_getValue(&iacCrankStepsTable, (currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET)) * 3; //All temps are offset by 40 degrees. Step counts are divided by 3 in TS. Multiply back out here
@@ -364,7 +364,7 @@ void idleControl()
           idle_pid_target_value = idleStepper.targetIdleStep << 2; //Resolution increased
           idlePID.Initialize(); //Update output to smooth transition
         }
-        else if (BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN) && ( runSecsX10 < configPage2.idleTaperTime ))
+        else if (BIT_CHECK(currentStatus.engine, BIT_ENGINE_RUN) )
         { 
           
           if( (idleCounter & 31) == 1)
