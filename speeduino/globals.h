@@ -1010,7 +1010,7 @@ struct config9 {
   byte idlePidRpmdotDisable;
   byte idlePidTpsDisable;
   byte iacMinSteps;
-  byte unused10_159;
+  byte idleVssDisable;
   byte unused10_160;
   byte unused10_161;
   byte unused10_162;
