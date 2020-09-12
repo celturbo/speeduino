@@ -384,7 +384,7 @@ void idleControl()
         }
 
         // Disables PID correction and maintains the position during RPM transients or TPS position.
-        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10)) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) && (currentStatus.vss > configPage9.idleVssDisable) ) 
+        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10)) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) || (currentStatus.vss > configPage9.idleVssDisable) ) 
         {
           BIT_CLEAR(currentStatus.status4, BIT_STATUS4_CLIDLE);
           IdleOldTime = runSecsX10;                
