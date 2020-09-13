@@ -387,7 +387,14 @@ void idleControl()
         else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10)) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) || (currentStatus.vss > configPage9.idleVssDisable) ) 
         {
           BIT_CLEAR(currentStatus.status4, BIT_STATUS4_CLIDLE);
-          IdleOldTime = runSecsX10;                
+          IdleOldTime = runSecsX10;  
+
+          if (currentStatus.vss > configPage9.idleVssDisable)
+           {
+            idle_pid_target_value = (configPage9.iacMinSteps * 3)<<2;
+            idlePID.Initialize(); //Update output to smooth transition  
+           }            
+
         }
         
           idleStepper.targetIdleStep = idle_pid_target_value>>2; //Increase resolution
