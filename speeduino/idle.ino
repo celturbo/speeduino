@@ -391,8 +391,10 @@ void idleControl()
 
           if (currentStatus.vss > configPage9.idleVssDisable)
            {
+            idleStepper.targetIdleStep = configPage9.iacMinSteps * 3;
             idle_pid_target_value = (configPage9.iacMinSteps * 3)<<2;
             idlePID.Initialize(); //Update output to smooth transition  
+
            }            
 
         }
