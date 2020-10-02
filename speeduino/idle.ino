@@ -378,7 +378,7 @@ void idleControl()
           currentStatus.CLIdleTarget = (byte)table2D_getValue(&iacClosedLoopTable, currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET); //All temps are offset by 40 degrees
           idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //All temps are offset by 40 degrees
 
-        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) && (currentStatus.vss <= configPage9.idleVssDisable) )
+        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) && (currentStatus.vss <= configPage9.idleVssDisable || !clutchTrigger) )
         {          
           PID_computed = idlePID.Compute(true);
           BIT_SET(currentStatus.status4, BIT_STATUS4_CLIDLE);
@@ -390,7 +390,7 @@ void idleControl()
           BIT_CLEAR(currentStatus.status4, BIT_STATUS4_CLIDLE);
           IdleOldTime = runSecsX10;  
 
-          if (currentStatus.vss > configPage9.idleVssDisable)
+          if ( currentStatus.vss > configPage9.idleVssDisable )
            {
             idleStepper.targetIdleStep = configPage9.iacMinSteps * 3;
             idle_pid_target_value = (configPage9.iacMinSteps * 3)<<2;
