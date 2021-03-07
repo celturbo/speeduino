@@ -18,12 +18,13 @@ Flood clear mode etc.
 #include "speeduino.h"
 #include "timers.h"
 #include "maths.h"
+#include "idle.h"
 #include "sensors.h"
 #include "src/PID_v1/PID_v1.h"
 
-long PID_O2, PID_output, PID_AFRTarget;
+long PID_O2, PID_output, PID_AFRTarget,idleAdvance_pid_target_value;
 PID egoPID(&PID_O2, &PID_output, &PID_AFRTarget, configPage6.egoKP, configPage6.egoKI, configPage6.egoKD, REVERSE); //This is the PID object if that algorithm is used. Needs to be global as it maintains state outside of each function call
-
+integerPID AdvanceIdlePID(&currentStatus.longRPM, &idleAdvance_pid_target_value, &idle_cl_target_rpm, configPage2.idleAdvanceKP, configPage2.idleAdvanceKI, configPage2.idleAdvanceKD, DIRECT); //This is the PID object if that algorithm is used. Needs to be global as it maintains state outside of each function call
 int MAP_rateOfChange;
 int TPS_rateOfChange;
 byte activateMAPDOT; //The mapDOT value seen when the MAE was activated. 
@@ -40,6 +41,7 @@ uint16_t dfcoStart;
 void initialiseCorrections()
 {
   egoPID.SetMode(AUTOMATIC); //Turn O2 PID on
+  AdvanceIdlePID.SetMode(AUTOMATIC); //Turn Advance idle Closed loop PID on
   currentStatus.flexIgnCorrection = 0;
   currentStatus.egoCorrection = 100; //Default value of no adjustment must be set to avoid randomness on first correction cycle after startup
   AFRnextCycle = 0;
@@ -739,7 +741,7 @@ int8_t correctionCLTadvance(int8_t advance)
 }
 
 int8_t correctionIdleAdvance(int8_t advance)
-{
+{ bool PID_computed2 = false;
 
   int8_t ignIdleValue = advance;
   //Adjust the advance based on idle target rpm.
@@ -755,14 +757,51 @@ int8_t correctionIdleAdvance(int8_t advance)
       int8_t advanceIdleAdjust = (int16_t)(table2D_getValue(&idleAdvanceTable, idleRPMdelta)) - 15;
       if(configPage2.idleAdvEnabled == 1) { ignIdleValue = (advance + advanceIdleAdjust); }
       else if(configPage2.idleAdvEnabled == 2) { ignIdleValue = advanceIdleAdjust; }
+      else if(configPage2.idleAdvEnabled == 3) 
+      {   AdvanceIdlePID.SetTunings( configPage2.idleAdvanceKP, configPage2.idleAdvanceKI, configPage2.idleAdvanceKD); //Set the PID values again, just incase the user has changed them since the last loop
+       
+       
+        
+        idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //Multiply the byte target value back out by 10
+          PID_computed2 = AdvanceIdlePID.ComputeIdleAdvace(true);
+      if (PID_computed2==true)
+        {
+        ignIdleValue = idleAdvance_pid_target_value >>2; 
+        
+        }
+      
+      ignIdleValue = idleAdvance_pid_target_value >>2; 
+      
+       }
+
+
     }
     else if( (configPage2.idleAdvAlgorithm == 1) && (currentStatus.RPM < (unsigned int)(configPage2.idleAdvRPM * 100) && (currentStatus.CTPSActive == 1) ) && ((configPage2.vssMode == 0) || (currentStatus.vss < configPage2.idleAdvVss)) ) // closed throttle position sensor (CTPS) based idle state
     {
       int8_t advanceIdleAdjust = (int16_t)(table2D_getValue(&idleAdvanceTable, idleRPMdelta)) - 15;
       if(configPage2.idleAdvEnabled == 1) { ignIdleValue = (advance + advanceIdleAdjust); }
       else if(configPage2.idleAdvEnabled == 2) { ignIdleValue = advanceIdleAdjust; }
+      else if(configPage2.idleAdvEnabled == 3) 
+      { 
+        AdvanceIdlePID.SetTunings( configPage2.idleAdvanceKP, configPage2.idleAdvanceKI, configPage2.idleAdvanceKD); //Set the PID values again, just incase the user has changed them since the last loop
+
+        bool PID_compute = AdvanceIdlePID.ComputeIdleAdvace(true);
+        idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //Multiply the byte target value back out by 10
+
+      if (PID_compute==true)
+        {
+        ignIdleValue = idleAdvance_pid_target_value >>2; 
+        
+        }
     }
-  }
+
+
+    }
+     idleAdvance_pid_target_value = ignIdleValue << 2; //Resolution increased
+          AdvanceIdlePID.Initialize(); //Update output to smooth transition
+    
+    
+    }
   return ignIdleValue;
 }
 

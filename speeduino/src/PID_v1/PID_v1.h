@@ -89,6 +89,7 @@ class integerPID
   #define DIRECT  0
   #define REVERSE  1
   #define PID_SHIFTS  10 //Increased resolution
+  #define PID_SHIFTS2  11 //Increased resolution
 
   //commonly used functions **************************************************************************
     integerPID(long*, long*, long*,        // * constructor.  links the PID to the Input, Output, and
@@ -102,6 +103,7 @@ class integerPID
                                           //   calculation frequency can be set using SetMode
                                           //   SetSampleTime respectively
     bool Compute2(int, int, bool);
+    bool ComputeIdleAdvace (bool, long FeedForwardTerm = 0);
     bool ComputeVVT(uint32_t);
     
     void SetOutputLimits(long, long); //clamps the output to a specific range. 0-255 by default, but

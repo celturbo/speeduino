@@ -296,6 +296,67 @@ bool integerPID::Compute(bool pOnE, long FeedForwardTerm)
    return false;
 }
 
+bool integerPID::ComputeIdleAdvace(bool pOnE, long FeedForwardTerm)
+{
+   if(!inAuto) return false;
+   unsigned long now = millis();
+   unsigned long timeChange = (now - lastTime);
+   if(timeChange >= SampleTime)
+   {
+      /*Compute all the working error variables*/
+	   long input = *myInput;
+      if(input > 0) //Fail safe, should never be 0
+      {
+         long error = *mySetpoint - input;
+         long dInput = (input - lastInput);
+         long outMinResized = outMin<<PID_SHIFTS;
+         long outMaxResized = outMax<<PID_SHIFTS;
+         FeedForwardTerm <<= PID_SHIFTS;
+
+         if (ki != 0)
+         {
+            outputSum += (ki * error); //integral += error × dt
+            if(outputSum > outMaxResized-FeedForwardTerm) { outputSum = outMaxResized-FeedForwardTerm; }
+            else if(outputSum < outMinResized-FeedForwardTerm) { outputSum = outMinResized-FeedForwardTerm; }
+         }
+
+         /*Compute PID Output*/
+         long output;
+         
+         if(pOnE)
+         {
+            output = (kp * error);
+            if (ki != 0) { output += outputSum; }
+            if (kd != 0) { output -= (kd * dInput)>>2; }
+            output += FeedForwardTerm;
+           output >>= PID_SHIFTS;
+         }
+         else
+         {
+            outputSum -= (kp * dInput);
+            if(outputSum > outMaxResized) { outputSum = outMaxResized; }
+            else if(outputSum < outMinResized) { outputSum = outMinResized; }
+
+            output = outputSum;
+            if (kd != 0) { output -= (kd * dInput)>>2; }
+            output += FeedForwardTerm;
+            output >>= PID_SHIFTS;
+         }
+
+         if(output > outMax) output = outMax;
+         else if(output < outMin) output = outMin;
+         *myOutput = output;
+
+         /*Remember some variables for next time*/
+         lastInput = input;
+         lastTime = now;
+
+         return true;
+      }
+   }
+   return false;
+}
+
 bool integerPID::ComputeVVT(uint32_t Sample)
 {
    if(!inAuto) return false;
@@ -415,9 +476,9 @@ void integerPID::SetTunings(byte Kp, byte Ki, byte Kd, byte realTime)
    {
       long InverseSampleTimeInSec = 1000 / SampleTime;
       //New resolution, 5 shifts to improve ki here | kp 3.125% | ki 3.125% | kd 0.781%
-      kp = (uint16_t)Kp<<5;
-      ki = (long)(Ki<<5) / InverseSampleTimeInSec;
-      kd = (long)(Kd<<5) * InverseSampleTimeInSec;
+      kp = (uint16_t)Kp;
+      ki = (long)(Ki) / InverseSampleTimeInSec;
+      kd = (long)(Kd) * InverseSampleTimeInSec;
    }
    else
    {
