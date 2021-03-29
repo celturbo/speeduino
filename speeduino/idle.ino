@@ -322,14 +322,14 @@ void idleControl()
         if( (idleCounter & 31) == 1) { idlePID.SetTunings(configPage6.idleKP, configPage6.idleKI, configPage6.idleKD); } //This only needs to be run very infrequently, once every 32 calls to idleControl(). This is approx. once per second
 
         
-        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) )
+        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) )
         {          
           PID_computed = idlePID.Compute(true);
           BIT_SET(currentStatus.status4, BIT_STATUS4_CLIDLE);
         }
 
         // Disables PID correction and maintains the position during RPM transients or TPS position.
-        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) ) )
+        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) ) )
         {
           BIT_CLEAR(currentStatus.status4, BIT_STATUS4_CLIDLE);
           IdleOldTime = runSecsX10;                
