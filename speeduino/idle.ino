@@ -492,14 +492,15 @@ void idleControl()
           currentStatus.CLIdleTarget = (byte)table2D_getValue(&iacClosedLoopTable, currentStatus.coolant + CALIBRATION_TEMPERATURE_OFFSET); //All temps are offset by 40 degrees
           idle_cl_target_rpm = (uint16_t)currentStatus.CLIdleTarget * 10; //All temps are offset by 40 degrees
 
-        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) )
+        if( ((runSecsX10-IdleOldTime) >= configPage9.idlePidTimeDelay) && (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) && BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) )
+       // if( (currentStatus.TPS <= configPage9.idlePidTpsDisable) && (currentStatus.rpmDOT <= configPage9.idlePidRpmdotDisable*10) )
         {          
           PID_computed = idlePID.Compute(true);
           BIT_SET(currentStatus.status4, BIT_STATUS4_CLIDLE);
         }
 
         // Disables PID correction and maintains the position during RPM transients or TPS position.
-        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) ) )
+        else if( (currentStatus.rpmDOT > configPage9.idlePidRpmdotDisable*10) || (currentStatus.rpmDOT < (-configPage9.idlePidRpmdotDisable*10) || (currentStatus.TPS > configPage9.idlePidTpsDisable) || !BIT_CHECK(currentStatus.status1, BIT_STATUS1_DFCO) ) )
         {
           BIT_CLEAR(currentStatus.status4, BIT_STATUS4_CLIDLE);
           IdleOldTime = runSecsX10;                
