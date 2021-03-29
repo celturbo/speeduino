@@ -88,7 +88,7 @@ class integerPID
   #define MANUAL	0
   #define DIRECT  0
   #define REVERSE  1
-  #define PID_SHIFTS  10 //Increased resolution
+  #define PID_SHIFTS  9//Increased resolution
   #define PID_SHIFTS2  11 //Increased resolution
 
   //commonly used functions **************************************************************************
