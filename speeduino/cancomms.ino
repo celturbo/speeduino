@@ -798,4 +798,24 @@ if (PIDmode == 0x01)
        }     
     }
 }
+
+readAuxCanBus();
+{
+  for (int i = 0; i < 16; i++)
+  {
+    if (inMsg.id == (configPage9.caninput_source_can_address[i] + 0x100))
+    {
+
+      if (!BIT_CHECK(configPage9.caninput_source_num_bytes, i))
+      {
+        currentStatus.canin[i] = inMsg.buf[configPage9.caninput_source_start_byte[i]];
+      }
+
+      else
+      {
+        currentStatus.canin[i] = ((inMsg.buf[configPage9.caninput_source_start_byte[i]] << 8) | (inMsg.buf[configPage9.caninput_source_start_byte[i] + 1]));
+      }
+    }
+  }
+}
 #endif
