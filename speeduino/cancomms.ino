@@ -799,7 +799,7 @@ if (PIDmode == 0x01)
     }
 }
 
-readAuxCanBus();
+ void readAuxCanBus()
 {
   for (int i = 0; i < 16; i++)
   {
