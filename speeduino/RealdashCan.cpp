@@ -28,14 +28,13 @@ void RdCanSender::sendRdCanFrame(uint16_t id, uint16_t byte1, uint16_t byte2, ui
        // the 4 byte identifier at the beginning of each CAN frame
        // this is required for RealDash to 'catch-up' on ongoing stream of CAN frames
        const byte serialBlockTag[4] = {0x44, 0x33, 0x22, 0x11};
-       Serial3.write(serialBlockTag, 4);
-       // mySerial.write(serialBlockTag, 4);
+       Serial3.write(serialBlockTag, 4);       
 
        // the CAN frame id number (as 32bit little endian value)
        Serial3.write((const byte *)&canFrameId, 4);
-       // mySerial.write((const byte*)&canFrameId, 4);
+              
        //  CAN frame payload
        Serial3.write(frameData, 8);
-       // mySerial.write(frameData, 8);
+    
      }
    }

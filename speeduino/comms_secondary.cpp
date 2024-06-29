@@ -169,46 +169,37 @@ void secondserial_Command(void)
        break;
   }
   #endif
-} 
-    
-
-void RealdashCAN(void)
-{static uint16_t contrl = 0; // Variável estática mantém seu valor entre chamadas
-  
-   
-    static uint16_t baseId = 0x200;
-  
-if(contrl< NEW_CAN_PACKET_SIZE)
-{
-
-
-
-
-
-   rdCanSender1.sendRdCanFrame(
-            baseId, 
-            getTSLogEntry(contrl), 
-            getTSLogEntry(contrl + 1), 
-            getTSLogEntry(contrl + 2), 
-            getTSLogEntry(contrl + 3), 
-            getTSLogEntry(contrl + 4), 
-            getTSLogEntry(contrl + 5), 
-            getTSLogEntry(contrl + 6),
-            getTSLogEntry(contrl + 7)
-
-               
-        );
-
-        baseId++;
-contrl=(contrl+8);
 }
 
-else 
+void RealdashCAN(void)
 {
-baseId=0x200;
-contrl=0;}
+  static uint16_t contrl = 0; 
 
+  static uint16_t baseId = 0x200;
 
+  if (contrl < LOG_ENTRY_SIZE)
+  {
+    rdCanSender1.sendRdCanFrame(
+        baseId,
+        getTSLogEntry(contrl),
+        getTSLogEntry(contrl + 1),
+        getTSLogEntry(contrl + 2),
+        getTSLogEntry(contrl + 3),
+        getTSLogEntry(contrl + 4),
+        getTSLogEntry(contrl + 5),
+        getTSLogEntry(contrl + 6),
+        getTSLogEntry(contrl + 7));
+
+    baseId++;
+    contrl = (contrl + 8);
+
+    if (contrl >= LOG_ENTRY_SIZE)
+
+    {
+      baseId = 0x200;
+      contrl = 0;
+    }
+  }
 }
 
 // this routine sends a request(either "0" for a "G" , "1" for a "L" , "2" for a "R" to the Can interface or "3" sends the request via the actual local canbus
