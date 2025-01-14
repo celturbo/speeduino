@@ -9,7 +9,9 @@
 #define SECONDARY_SERIAL_PROTO_CAN            2
 #define SECONDARY_SERIAL_PROTO_MSDROID        3
 #define SECONDARY_SERIAL_PROTO_REALDASH       4
-#define SECONDARY_SERIAL_REALDASHCAN          5
+#define SECONDARY_SERIAL_PROTO_TUNERSTUDIO    5
+#define SECONDARY_SERIAL_REALDASHCAN          6
+
 
 extern SECONDARY_SERIAL_T *pSecondarySerial;
 #define secondarySerial (*pSecondarySerial)
